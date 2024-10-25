@@ -1,15 +1,3 @@
-    # copy this code into the SerialArm __init__ function (found right after the "class SerialArm:" statement)
-    # to define these variables required by the visualization for the arm
-        self.reach = 0
-        for i in range(self.n):
-            self.reach += np.sqrt(self.dh[i][1]**2 + self.dh[i][2]**2)
-
-        self.max_reach = 0.0
-        for dh in self.dh:
-            self.max_reach += norm(np.array([dh[1], dh[2]]))
-
-
-
     ## copy this function into the main SerialArm class and complete the TODO below
     def jacob(self, q, index=None, base=False, tip=False):
         """

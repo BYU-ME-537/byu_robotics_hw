@@ -108,11 +108,15 @@ class SerialArm:
             f =
             self.transforms.append(f.A)
 
-
         # assigning the base, and tip transforms that will be added to the default DH transformations.
         self.base = base
         self.tip = tip
         self.qlim = joint_limits
+
+        # calculating rough numbers to understand the workspace for drawing the robot
+        self.reach = 0
+        for dh in self.dh:
+            self.reach += norm(dh[1:3])
 
 
     def fk(self, q, index=None, base=False, tip=False):
