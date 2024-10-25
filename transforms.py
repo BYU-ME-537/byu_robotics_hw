@@ -1,8 +1,8 @@
 """
 Transforms Module - Contains code for to learn about rotations
-and eventually homogenous transforms. 
+and eventually homogenous transforms.
 
-Empty outline derived from code written by John Morrell, former TA. 
+Empty outline derived from code written by John Morrell, former TA.
 """
 
 import numpy as np
@@ -12,7 +12,7 @@ from numpy.linalg import norm
 ## 2D Rotations
 def rot2(th):
     """
-    R = rot2(theta)
+    R = rot2(th)
     Parameters
         theta: float or int, angle of rotation
     Returns
@@ -20,7 +20,7 @@ def rot2(th):
     """
 
     ## TODO - Fill this out
-    R = 
+    R =
     return R
 
 ## 3D Transformations
@@ -33,7 +33,7 @@ def rotx(th):
         R: 3 x 3 numpy array representing rotation about x-axis by amount theta
     """
     ## TODO - Fill this out
-    R = 
+    R =
 
     return R
 
@@ -46,7 +46,7 @@ def roty(th):
         R: 3 x 3 numpy array representing rotation about y-axis by amount theta
     """
     ## TODO - Fill this out
-    R = 
+    R =
 
     return R
 
@@ -60,11 +60,11 @@ def rotz(th):
     """
 
     ## TODO - Fill this out
-    R = 
+    R =
 
     return R
 
-# inverse of rotation matrix 
+# inverse of rotation matrix
 def rot_inv(R):
     '''
     R = rot_inv(R)
@@ -74,4 +74,4 @@ def rot_inv(R):
         R: 2x2 or 3x3 inverse of the input rotation matrix
     '''
     ## TODO - Fill this out
-    return 
+    return
