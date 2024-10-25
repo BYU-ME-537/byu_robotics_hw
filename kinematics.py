@@ -237,12 +237,5 @@ if __name__ == "__main__":
     viz.add_frame(Tn_in_0, label="Tn_in_0")
     viz.add_frame(T1_in_0, label="T1_in_0")
 
-    time_to_run = 30
-    refresh_rate = 60
-
-    for i in range(refresh_rate * time_to_run):
-        viz.update()
-        time.sleep(1.0/refresh_rate)
-    
+    viz.hold()
     viz.close_viz()
-    
