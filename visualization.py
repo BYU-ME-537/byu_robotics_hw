@@ -639,8 +639,8 @@ class ArmMeshObject:
         joint_width = np.max([arm_scale, 0.10])*0.30
         joint_height = np.max([arm_scale, 0.10])*0.70
 
-        # TODO: change rotary joints from cuboids to cylinders. 
-        # See example from "add_marker" about to easily generate a 
+        # TODO: change rotary joints from cuboids to cylinders.
+        # See example from "add_marker" about to easily generate a
         # cylinder mesh. - Killpack
 
         for i in range(self.n):
@@ -679,6 +679,7 @@ class ArmMeshObject:
         self.set_mesh(q)
         self.mesh_object.setMeshData(vertexes=self.mesh,
                                     vertexColors=self.colors)
+
     def set_mesh(self, q):
         meshes = []
         colors = []
@@ -703,7 +704,6 @@ class ArmMeshObject:
 
         meshes.append(self.ee_object.get_mesh(R, p))
         colors.append(self.ee_object.get_colors())
-
 
         self.mesh = np.vstack(meshes)
         self.colors = np.vstack(colors)
@@ -834,12 +834,12 @@ class FrameViz:
     # code duplication. - Mat
 
     def __init__(self, A=np.eye(4), scale=1, colors=[red,green,blue], frame_label=None, axes_label=None):
-        a = 0.35 * scale
-        r = a / 20
-        self.frame_label_pos = np.array([0, 0, -0.1])
-        self.axis_label_poss = np.eye(3) * a
+        height = 0.35 * scale
+        radius = height / 20
+        self.frame_label_pos = np.array([0, 0, -0.05])
+        self.axis_label_poss = np.eye(3) * height
         # gives mesh for cylinder along positive z-axis starting at origin
-        cylinder_mesh = gl.MeshData.cylinder(rows=10, cols=20, radius=[r]*2, length=a)
+        cylinder_mesh = gl.MeshData.cylinder(rows=10, cols=20, radius=[radius]*2, length=height)
         self.faces = cylinder_mesh.faces()
         z_pts = cylinder_mesh.vertexes().copy()
         y_pts = z_pts @ np.array([[1,0,0],[0,0,-1],[0,1,0]])
@@ -874,8 +874,8 @@ class FrameViz:
 class AxisViz:
 
     def __init__(self, axis: np.ndarray, pos_offset=np.zeros(3), scale=1, color=np.zeros(4), label=None):
-        a = 0.5 * scale
-        r = a / 20
+        height = 0.5 * scale
+        radius = height / 20
 
         axis = np.array(axis, dtype=np.float64)
         assert axis.shape == (3,)
@@ -892,13 +892,13 @@ class AxisViz:
             R = np.eye(3) + skew_v + (skew_v @ skew_v) / (1 + c)
 
         # gives mesh for cylinder along positive z-axis starting at origin
-        cylinder_mesh = gl.MeshData.cylinder(rows=10, cols=20, radius=[r]*2, length=a)
+        cylinder_mesh = gl.MeshData.cylinder(rows=10, cols=20, radius=[radius]*2, length=height)
         pts = cylinder_mesh.vertexes()
         cylinder_mesh.setVertexes(pts @ R.T + pos_offset)
         self.axis = gl.GLMeshItem(meshdata=cylinder_mesh, smooth=True, color=color)
         self.label = label
         if label is not None:
-            self.label = GLTextItem.GLTextItem(pos=a*R[:,2] + pos_offset, text=label, color=(0,0,0))
+            self.label = GLTextItem.GLTextItem(pos=height*R[:,2] + pos_offset, text=label, color=(0,0,0))
 
 
 class EEMeshObject:
