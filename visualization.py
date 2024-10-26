@@ -1,8 +1,6 @@
 import numpy as np
-from numpy import sqrt, sin, cos
-from numpy.linalg import norm
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QPushButton,
-                               QSizePolicy, QLabel)
+                             QSizePolicy, QLabel, QLineEdit)
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import Qt
 import pyqtgraph.opengl as gl
@@ -13,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.widgets import Slider
 from time import perf_counter, sleep
+import signal
 
 red = np.array([0.7, 0, 0, 1])
 green = np.array([0, 0.7, 0, 1])
@@ -38,7 +37,7 @@ class TransformMPL:
 
 class PlanarMPL:
 
-    def __init__(self, arm, q0=None, trace=False, ax=None):
+    def __init__(self, arm, q0: None|list=None, trace: bool=False, ax: None|plt.Axes=None):
         self.arm = arm
         if ax is not None:
             fig = ax.figure
@@ -46,8 +45,8 @@ class PlanarMPL:
         else:
             fig, ax = plt.subplots()
             flag = False
-        self.fig = fig
-        self.ax = ax
+        self.fig: plt.Figure = fig
+        self.ax: plt.Axes = ax
         self.n = arm.n
         self.reach = arm.reach
         if not flag:
@@ -55,8 +54,8 @@ class PlanarMPL:
             plt.xlim([-arm.reach * 1.5, arm.reach * 1.5])
             plt.ylim([-arm.reach * 1.5, arm.reach * 1.5])
 
-        self.joints = []
-        self.links = []
+        self.joints: list[Circle] = []
+        self.links: list[plt.Line2D] = []
         self.joints.append(self.ax.add_patch(Circle([0, 0], 0.15, color=[0,0,0,1])))
 
         if q0 is None:
@@ -80,9 +79,9 @@ class PlanarMPL:
             self.start_trace(q0)
 
     def start_trace(self, q0):
-        self.xs = []
-        self.ys = []
-        self.traces = []
+        self.xs: list[list[float]] = []
+        self.ys: list[list[float]] = []
+        self.traces: list[plt.Line2D] = []
         for i in range(self.n):
             pos = self.arm.fk(q0, index=i + 1)[0:2, 3]
             C = [0, 0, 0, 0.4]
@@ -127,21 +126,27 @@ class PlanarMPL:
             self.do_trace = False
             for i in range(self.n):
                 self.ax.lines.remove(self.traces[i])
+                # NOTE: This might be what you want if line above doesn't work - Mat
+                # self.ax.remove(self.traces[i])
 
         # move to the default position
         self.update(self.q0)
 
         # resize and create slider bars
         self.ax.set_position([0, 0, 0.75, 1])
-        plt.axis('equal')
-        plt.xlim([-self.arm.reach * 1.5, self.arm.reach * 1.5])
-        plt.ylim([-self.arm.reach * 1.5, self.arm.reach * 1.5])
+        # NOTE: I think these changes work and isolate the plot. If not, revert to the original code - Mat
+        self.ax.axis('equal')
+        self.ax.set_xlim([-self.arm.reach * 1.5, self.arm.reach * 1.5])
+        self.ax.set_ylim([-self.arm.reach * 1.5, self.arm.reach * 1.5])
+        # plt.axis('equal')
+        # plt.xlim([-self.arm.reach * 1.5, self.arm.reach * 1.5])
+        # plt.ylim([-self.arm.reach * 1.5, self.arm.reach * 1.5])
 
         max_h = 0.2
         min_h = 0.8 / self.n
         h = min(max_h, min_h)
-        self.sliders = []
-        self.gui_axes = []
+        self.sliders: list[Slider] = []
+        self.gui_axes: list[plt.Axes] = []
 
         def get_text_from_A(A):
             pos = np.around(A[0:2, 3], decimals=2)
@@ -180,12 +185,11 @@ class VizScene:
     """The viz scene holds all the 3d objects to be plotted. This includes arms (which are GLMeshObjects), transforms
     (which are plots or quiver type things), scatter points, and lines."""
     def __init__(self):
-        # self.arm = arm
-        # self.arm_object = ArmMeshObject(arm, draw_frames=draw_frames)
-        self.arms = []
-        self.frames = []
-        self.markers = []
-        self.obstacles = []
+        self.arms: list[ArmMeshObject] = []
+        self.frames: list[FrameViz] = []
+        self.axes: list[AxisViz] = []
+        self.markers: list[gl.GLMeshItem] = []
+        self.obstacles: list[gl.GLMeshItem] = []
         self.range = 5
 
         if QApplication.instance() is None:
@@ -206,10 +210,18 @@ class VizScene:
 
         self.app.processEvents()
 
-    def add_arm(self, arm, draw_frames=False, joint_colors=None):
-        self.arms.append(ArmMeshObject(arm, draw_frames=draw_frames, joint_colors=joint_colors))
-        self.arms[-1].update()
-        self.window.addItem(self.arms[-1].mesh_object)
+    def add_arm(self, arm, draw_frames=False, label_axes=False, joint_colors=None):
+        a = ArmMeshObject(arm, draw_frames=draw_frames, label_axes=label_axes, joint_colors=joint_colors)
+        self.arms.append(a)
+        a.update()
+        self.window.addItem(a.mesh_object)
+        if draw_frames:
+            for frame in a.frame_objects:
+                for axis in frame.axes:
+                    self.window.addItem(axis)
+                if label_axes:
+                    for txt in frame.axis_labels:
+                        self.window.addItem(txt)
 
         if 2 * arm.reach > self.range:
             self.range = 2 * arm.reach
@@ -221,28 +233,46 @@ class VizScene:
         if arm is None:
             for arm in self.arms:
                 self.window.removeItem(arm.mesh_object)
-            self.arms = []
+                if arm.draw_frames:
+                    for frame in arm.frame_objects:
+                        for axis in frame.axes:
+                            self.window.removeItem(axis)
+                        if arm.label_axes:
+                            for txt in frame.axis_labels:
+                                self.window.removeItem(txt)
+            self.arms.clear()
         elif isinstance(arm, (int)):
             self.window.removeItem(self.arms[arm].mesh_object)
+            if self.arms[arm].draw_frames:
+                for frame in self.arms[arm].frame_objects:
+                    for axis in frame.axes:
+                        self.window.removeItem(axis)
+                    if self.arms[arm].label_axes:
+                        for txt in frame.axis_labels:
+                            self.window.removeItem(txt)
             self.arms.pop(arm)
         else:
             print("Warning: invalid index entered!")
             return None
         self.app.processEvents()
 
-    def add_frame(self, A, label=None):
-        self.frames.append(FrameViz(label=label))
-        self.frames[-1].update(A)
-        self.window.addItem(self.frames[-1].mesh_object)
+    def add_frame(self, A, label=None, axes_label=None):
+        self.frames.append(FrameViz(A, frame_label=label, axes_label=axes_label))
+        self.window.addItem(self.frames[-1].axes[0])
+        self.window.addItem(self.frames[-1].axes[1])
+        self.window.addItem(self.frames[-1].axes[2])
         if label is not None:
-            self.window.addItem(self.frames[-1].label)
+            self.window.addItem(self.frames[-1].frame_label)
+        if axes_label is not None:
+            for txt in self.frames[-1].axis_labels:
+                self.window.addItem(txt)
 
             # this was from the old version of text rendering. I don't think it's needed, but
             # seems to assign a windwo to render to, so I don't know for sure. - Killpack
             # self.frames[-1].label.setGLViewWidget(self.window)
 
-        if 2 * norm(A[0:3, 3]) > self.range:
-            self.range = 2 * norm(A[0:3, 3])
+        if 2 * np.linalg.norm(A[:3,3]) > self.range:
+            self.range = 2 * np.linalg.norm(A[:3,3])
             self.window.setCameraPosition(distance=self.range)
 
         self.app.processEvents()
@@ -250,41 +280,53 @@ class VizScene:
     def remove_frame(self, ind=None):
         if ind is None:
             for frame in self.frames:
-                self.window.removeItem(frame.mesh_object)
-            self.frames = []
+                for axis in frame.axes:
+                    self.window.removeItem(axis)
+                if frame.frame_label is not None:
+                    self.window.removeItem(frame.frame_label)
+                if frame.axis_labels is not None:
+                    for txt in frame.axis_labels:
+                        self.window.removeItem(txt)
+            self.frames.clear()
         elif isinstance(ind, (int)):
-            self.window.removeItem(self.frames[ind].mesh_object)
+            for axis in self.frames[ind].axes:
+                self.window.removeItem(axis)
+            if self.frames[ind].frame_label is not None:
+                self.window.removeItem(self.frames[ind].frame_label)
+            if self.frames[ind].axis_labels is not None:
+                for txt in self.frames[ind].axis_labels:
+                    self.window.removeItem(txt)
             self.frames.pop(ind)
         else:
             print("Warning: invalid index entered!")
             return None
         self.app.processEvents()
 
-    # def add_marker(self, pos, color=green, size=10):
-    #     if not isinstance(pos, (np.ndarray)):
-    #         pos = np.array(pos)
+    def add_axis(self, axis, pos_offset=np.zeros(3), label=None):
+        self.axes.append(AxisViz(axis, pos_offset, label=label))
+        self.window.addItem(self.axes[-1].axis)
+        if label is not None:
+            self.window.addItem(self.axes[-1].label)
 
-    #     self.markers.append(gl.GLScatterPlotItem(pos=pos, color=color, size=size))
-    #     self.window.addItem(self.markers[-1])
+        self.app.processEvents()
 
-    #     if 2 * norm(pos) > self.range:
-    #         self.range = 2 * norm(pos)
-    #         self.window.setCameraPosition(distance=self.range)
-
-    #     self.app.processEvents()
-
-    # def remove_marker(self, ind=None):
-    #     if ind is None:
-    #         for marker in self.markers:
-    #             self.window.removeItem(marker.mesh_object)
-    #         self.markers = []
-    #     elif isinstance(ind, (int)):
-    #         self.window.removeItem(self.markers[ind])
-    #         self.markers.pop(ind)
-    #     else:
-    #         print("Warning: invalid index entered!")
-    #         return None
-    #     self.app.processEvents()
+    def remove_axis(self, ind=None):
+        if ind is None:
+            for axis in self.axes:
+                self.window.removeItem(axis.axis)
+                if axis.label is not None:
+                    self.window.removeItem(axis.label)
+            self.axes.clear()
+        elif isinstance(ind, (int)):
+            ax_viz = self.axes[ind]
+            self.window.removeItem(ax_viz.axis)
+            if ax_viz.label is not None:
+                self.window.removeItem(ax_viz.label)
+            self.axes.pop(ind)
+        else:
+            print("Warning: invalid index entered!")
+            return None
+        self.app.processEvents()
 
     def add_marker(self, pos, color=green, radius=0.1):
         if not isinstance(pos, (np.ndarray)):
@@ -296,24 +338,21 @@ class VizScene:
             meshdata=marker,
             smooth=True,
             color=color
-            #shader="shaded"
-            #glOptions="additive"
         )
         mesh_marker.translate(*pos)
 
         self.markers.append(mesh_marker)
         self.window.addItem(self.markers[-1])
 
-        if 2 * norm(pos) > self.range:
-            self.range = 2 * norm(pos)
+        if 2 * np.linalg.norm(pos) > self.range:
+            self.range = 2 * np.linalg.norm(pos)
             self.window.setCameraPosition(distance=self.range)
 
-        self.app.processEvents()        
+        self.app.processEvents()
 
     def remove_marker(self, ind=None):
         if ind is None:
             for marker in self.markers:
-                #self.window.removeItem(marker.mesh_object)
                 self.window.removeItem(marker)
             self.markers = []
         elif isinstance(ind, (int)):
@@ -335,8 +374,6 @@ class VizScene:
             meshdata=mobst,
             smooth=True,
             color=yellow
-            #shader="shaded"
-            #glOptions="additive",
         )
         m1.translate(*pos)
 
@@ -356,7 +393,7 @@ class VizScene:
         else:
             print("Warning: invalid index entered!")
             return None
-        self.app.processEvents()        
+        self.app.processEvents()
 
     def update(self, qs=None, As=None, poss=None):
         if qs is not None:
@@ -391,7 +428,7 @@ class VizScene:
                 else:
                     pos = poss
                 self.markers[0].resetTransform()
-                self.markers[0].translate(*pos) 
+                self.markers[0].translate(*pos)
 
         self.app.processEvents()
         sleep(0.00001)
@@ -451,29 +488,60 @@ class ArmPlayer:
         self.main_layout = QHBoxLayout()
         w1 = gl.GLViewWidget()
         w1.setBackgroundColor('w')
-        grid = gl.GLGridItem(color=(0, 0, 0, 76.5))        
+        grid = gl.GLGridItem(color=(0, 0, 0, 76.5))
         grid.scale(1, 1, 1)
         w1.addItem(grid)
         self.arm = ArmMeshObject(arm)
         self.n = arm.n
+        self.jt = arm.jt
+        r_scale = 2 # slider increments by 1/2 for revelute joints
+        r_max = 180
+        p_scale = 100 # slider increments by 1/100 for prismatic joints
+        p_max = 1.
+        self.jt_scale = np.array([r_scale if jt == 'r' else p_scale for jt in arm.jt])
+        if arm.qlim is None:
+            self.jt_lims = np.array([
+                [-r_max if jt == 'r' else -p_max for jt in arm.jt],
+                [r_max if jt == 'r' else p_max for jt in arm.jt]
+                ], dtype=np.float64).T
+        else:
+            # expecting qlim for 'r' joints to be in radians
+            self.jt_lims = np.array(arm.qlim, dtype=np.float64).T
+            mask = [True if jt == 'r' else False for jt in arm.jt]
+            self.jt_lims[mask] = np.rad2deg(self.jt_lims[mask])
+            assert self.jt_lims.shape == (self.n,2)
+
         w1.addItem(self.arm.mesh_object)
         w1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         w2 = QVBoxLayout()
-        self.slider_list = []
-        self.slider_label_list = []
+        self.sliders: list[QSlider] = []
+        self.slider_textboxes: list[QLineEdit] = []
         for i in range(arm.n):
-            t = QLabel()
-            t.setText(f"Joint {i + 1}: 0 degrees")
-            t.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            line = QHBoxLayout()
+            t1 = QLabel()
+            t1.setText(f"Joint {i + 1}: ")
+            t1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            box = QLineEdit()
+            box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            box.setText("0.0")
+            box.editingFinished.connect(self.update_textboxes)
+            t2 = QLabel()
+            if arm.jt[i] == 'r':
+                t2.setText("(degrees)")
+            else:
+                t2.setText("(meters)")
+            t2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            line.addWidget(t1)
+            line.addWidget(box)
+            line.addWidget(t2)
             s = QSlider(Qt.Horizontal)
-            s.setMinimum(-360)
-            s.setMaximum(360)
+            s.setRange(*(self.jt_lims[i] * self.jt_scale[i]).astype(int))
             s.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            s.sliderMoved.connect(self.update_sliders)
-            self.slider_list.append(s)
-            self.slider_label_list.append(t)
-            w2.addWidget(t, stretch=1)
-            w2.addWidget(s, stretch=3)
+            s.valueChanged.connect(self.update_sliders)
+            self.sliders.append(s)
+            self.slider_textboxes.append(box)
+            w2.addLayout(line, stretch=0)
+            w2.addWidget(s, stretch=0)
         button = QPushButton()
         button.setText("Randomize")
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -491,38 +559,61 @@ class ArmPlayer:
 
         self.app.processEvents()
 
-        self.app.exec_()
+        # kill with ctrl-c
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        self.app.exec()
 
+    # NOTE: The following 3 update functions are inefficient because all buttons
+    # and sliders are updated when any one of them are changed. Could be optimized
+    # by adding unique update functions for each item in the constructor above.
+    # - Mat
     def update_sliders(self):
-
         qs = np.zeros((self.n,))
+        for i, s in enumerate(self.sliders):
+            q = s.value() / self.jt_scale[i]
+            if self.jt[i] == 'r':
+                qs[i] = np.deg2rad(q)
+            else:
+                qs[i] = q
+            self.slider_textboxes[i].setText(f'{q}')
+        self.arm.update(qs)
 
-        for i, s in enumerate(self.slider_list):
-            q = s.value()
-            qs[i] = q / 2 * np.pi / 180
-            self.slider_label_list[i].setText(f"Joint {i + 1}: {q / 2} degrees")
-
+    def update_textboxes(self):
+        qs = np.zeros((self.n,))
+        for i, b in enumerate(self.slider_textboxes):
+            try: # if the text box is empty or not a number, it will throw an error
+                q = float(b.text())
+                if q > self.jt_lims[i,1]:
+                    q = self.jt_lims[i,1]
+                elif q < self.jt_lims[i,0]:
+                    q = self.jt_lims[i,0]
+            except: # if invalid text then just use the current slider value
+                q = self.sliders[i].value() / self.jt_scale[i]
+            self.sliders[i].setValue(int(q*self.jt_scale[i]))
+            if self.jt[i] == 'r':
+                q = np.deg2rad(q)
+            qs[i] = q
         self.arm.update(qs)
 
     def button_pressed(self):
-
-        qs = np.random.random_sample((self.n,)) * 2 * np.pi - np.pi
-
-        for i, z in enumerate(zip(self.slider_list, qs)):
-            s, q1 = z[0], z[1]
-            q = int(180 / np.pi * 2 * q1)
-            s.setValue(q)
-            self.slider_label_list[i].setText(f"Joint {i + 1}: {q / 2} degrees")
-
-        self.arm.update(qs)
+        qs = np.empty(self.n)
+        for i in range(self.n):
+            q = np.random.uniform(*self.jt_lims[i])
+            if self.jt[i] == 'r':
+                qs[i] = np.radians(q)
+            else:
+                qs[i] = q
+            self.sliders[i].setValue(int(q*self.jt_scale[i]))
+        self.update_textboxes()
 
 
 class ArmMeshObject:
-    def __init__(self, arm, link_colors=None, joint_colors=None, ee_color=None, q0=None, draw_frames=False, frame_names=None):
+    def __init__(self, arm, link_colors=None, joint_colors=None, q0=None, draw_frames=False, label_axes=False):
         self.arm = arm
         self.n = arm.n
         self.dh = arm.dh
         self.draw_frames = draw_frames
+        self.label_axes = label_axes
 
         if q0 is None:
             q0 = np.zeros((self.n,))
@@ -535,37 +626,35 @@ class ArmMeshObject:
             link_colors = [blue] * self.n
 
         if joint_colors is None:
-            joint_colors = [red] * self.n
+            joint_colors = [red if jt == 'r' else green for jt in arm.jt]
 
         dh_array = np.array(self.dh)
         arm_scale = np.max([np.max(dh_array[0:,1:3]), 0.3])
         frame_scale = 1.5
         ee_scale = 2.0
 
-        self.frame_objects.append(FrameMeshObject(scale=arm_scale*frame_scale))
+        self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label='b'))
 
         link_width = np.max([arm_scale, 0.10])*0.20
         joint_width = np.max([arm_scale, 0.10])*0.30
         joint_height = np.max([arm_scale, 0.10])*0.70
 
-        # TODO: change rotary joints from cuboids to cylinders. 
-        # See example from "add_marker" about to easily generate a 
+        # TODO: change rotary joints from cuboids to cylinders.
+        # See example from "add_marker" about to easily generate a
         # cylinder mesh. - Killpack
 
         for i in range(self.n):
-            if arm.jt[i] == 'p':
-                joint_colors[i] = np.array([0.0, 0.6, 0.0, 1.0])
             self.link_objects.append(LinkMeshObject(self.dh[i],
                                                     link_width=link_width,
                                                     joint_width=joint_width,
                                                     joint_height=joint_height,
                                                     link_color=link_colors[i],
                                                     joint_color=joint_colors[i]))
-            self.frame_objects.append(FrameMeshObject(scale=arm_scale*frame_scale))
+            self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label=f'{i}'))
 
 
         self.ee_object = EEMeshObject(scale=arm_scale*ee_scale)
-        self.frame_objects.append(FrameMeshObject(scale=arm_scale*frame_scale))
+        self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label='t'))
 
         self.mesh = np.zeros((0, 3, 3))
         self.colors = np.zeros((0, 3, 4))
@@ -581,41 +670,40 @@ class ArmMeshObject:
     def update(self, q=None):
         # it's highly possible that this could be done by using .translate and .rotate functions
         # to simplify the complexity of recalculating every vertex ever time. But "translate" and
-        # "rotate" may both be relative motion (meaning you have to use resetTransform too)... 
+        # "rotate" may both be relative motion (meaning you have to use resetTransform too)...
         # - Killpack
+        # Mat: translate() and rotate() are relative to the global origin, so you
+        # would need to use resetTransform, do rotate() first, then translate()
         if q is None:
             q = self.q0
         self.set_mesh(q)
         self.mesh_object.setMeshData(vertexes=self.mesh,
                                     vertexColors=self.colors)
+
     def set_mesh(self, q):
         meshes = []
         colors = []
         if self.draw_frames:
             A = self.arm.fk(q, 0, base=True, tip=False)
-            R = A[0:3, 0:3]
-            p = A[0:3, 3]
-            meshes.append(self.frame_objects[0].get_mesh(R, p))
-            colors.append(self.frame_objects[0].get_colors())
+            R = A[:3,:3]
+            p = A[:3,3]
+            self.frame_objects[0].update(A)
         for i in range(self.n):
             A = self.arm.fk(q, i+1, base=True, tip=False)
-            R = A[0:3, 0:3]
-            p = A[0:3, 3]
+            R = A[:3,:3]
+            p = A[:3,3]
             meshes.append(self.link_objects[i].get_mesh(R, p))
             colors.append(self.link_objects[i].get_colors())
             if self.draw_frames:
-                meshes.append(self.frame_objects[i+1].get_mesh(R, p))
-                colors.append(self.frame_objects[i + 1].get_colors())
-        A = self.arm.fk(q, i + 1, base=True, tip=True)
-        R = A[0:3, 0:3]
-        p = A[0:3, 3]
+                self.frame_objects[i+1].update(A)
+        A = self.arm.fk(q, i+1, base=True, tip=True)
+        R = A[:3,:3]
+        p = A[:3,3]
         if self.draw_frames:
-            meshes.append(self.frame_objects[-1].get_mesh(R, p))
-            colors.append(self.frame_objects[-1].get_colors())
+            self.frame_objects[-1].update(A)
 
         meshes.append(self.ee_object.get_mesh(R, p))
         colors.append(self.ee_object.get_colors())
-
 
         self.mesh = np.vstack(meshes)
         self.colors = np.vstack(colors)
@@ -639,7 +727,7 @@ class LinkMeshObject:
         w = joint_width
         h = joint_height
 
-        le = sqrt(d**2 + a**2)
+        le = np.sqrt(d**2 + a**2)
 
         self.link_points = np.array([[0, lw/2, 0],
                                      [0, 0, lw/2],
@@ -651,7 +739,7 @@ class LinkMeshObject:
                                      [-le, 0, -lw / 2]])
 
         v1 = np.array([-le, 0, 0])
-        v2 = np.array([-a, d * sin(-alpha), -d * cos(-alpha)])
+        v2 = np.array([-a, d * np.sin(-alpha), -d * np.cos(-alpha)])
 
         axis = np.cross(v1, v2)
         n_axis = np.linalg.norm(axis)
@@ -659,13 +747,12 @@ class LinkMeshObject:
             R = np.eye(3)
         else:
             axis = axis / np.linalg.norm(axis)
-            ang = np.arccos(v1 @ v2 / (norm(v1) * norm(v2)))
-            v = axis / norm(axis)
+            ang = np.arccos(v1 @ v2 / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+            v = axis / np.linalg.norm(axis)
             V = np.array([[0, -v[2], v[1]],
                           [v[2], 0, -v[0]],
                           [-v[1], v[0], 0]])
-            R = np.eye(3) + sin(ang) * V + (1 - cos(ang)) * V @ V
-            # R = axis2R(ang, axis)
+            R = np.eye(3) + np.sin(ang) * V + (1 - np.cos(ang)) * V @ V
 
         self.link_points = self.link_points @ R.T
 
@@ -678,13 +765,13 @@ class LinkMeshObject:
                                 [-0.5 * w, 0.5 * w, 0.5 * h],
                                 [0.5 * w, 0.5 * w, 0.5 * h]])
 
-        Rz = np.array([[cos(theta), -sin(theta), 0],
-                       [sin(theta), cos(theta), 0],
+        Rz = np.array([[np.cos(theta), -np.sin(theta), 0],
+                       [np.sin(theta), np.cos(theta), 0],
                        [0, 0, 1]])
 
         Rx = np.array([[1, 0, 0],
-                       [0, cos(alpha), -sin(alpha)],
-                       [0, sin(alpha), cos(alpha)]])
+                       [0, np.cos(alpha), -np.sin(alpha)],
+                       [0, np.sin(alpha), np.cos(alpha)]])
 
         self.joint_points = self.joint_points @ Rz @ Rx + v2
 
@@ -743,78 +830,75 @@ class LinkMeshObject:
 
 
 class FrameViz:
-    def __init__(self, A=np.eye(4), scale=1, colors=[red, green, blue], label=None):
-        self.frame_object = FrameMeshObject(scale, colors)
-        self.mesh = self.frame_object.get_mesh(A[0:3, 0:3], A[0:3, 3])
-        self.colors = self.frame_object.get_colors()
-        self.mesh_object = gl.GLMeshItem(vertexes=self.mesh,
-                                         vertexColors=self.colors,
-                                         computeNormals=False,
-                                         drawEdges=False)
-        # TODO: replace triangles with closed cylinders
-        #       Not clear how to make three cylinders with three different colors,
-        #       do I need three different mesh objecsts? John didn't do that for 
-        #       the FrameMeshObject method. - Killpack
-        # 
-        # this may be it, but we'd need to make three of them, RGB, and then
-        # rotate and update them in the function below.
-        #self.mesh_object = gl.MeshData.cylinder(rows=20, cols=20, radii=[0.1*scale, 0.1*scale], length=0.35*scale)
+    # NOTE: This class could likely be changed to use the AxisViz class to reduce
+    # code duplication. - Mat
 
-        if label is not None:
-            self.label = GLTextItem.GLTextItem(pos=A[0:3,3], text=label, color=(0, 0, 0))
+    def __init__(self, A=np.eye(4), scale=1, colors=[red,green,blue], frame_label=None, axes_label=None):
+        height = 0.35 * scale
+        radius = height / 20
+        self.frame_label_pos = np.array([0, 0, -0.05])
+        self.axis_label_poss = np.eye(3) * height
+        # gives mesh for cylinder along positive z-axis starting at origin
+        cylinder_mesh = gl.MeshData.cylinder(rows=10, cols=20, radius=[radius]*2, length=height)
+        self.faces = cylinder_mesh.faces()
+        z_pts = cylinder_mesh.vertexes().copy()
+        y_pts = z_pts @ np.array([[1,0,0],[0,0,-1],[0,1,0]])
+        x_pts = z_pts @ np.array([[0,0,-1],[0,1,0],[1,0,0]])
+        self.pts = [x_pts, y_pts, z_pts]
+        self.axes = [gl.GLMeshItem(meshdata=cylinder_mesh, smooth=True, color=colors[i]) for i in range(3)]
+        self.frame_label = frame_label
+        if self.frame_label is not None:
+            self.frame_label = GLTextItem.GLTextItem(text=frame_label, color=(0,0,0))
+        self.axis_labels = axes_label
+        if self.axis_labels is not None:
+            self.axis_labels = [
+                GLTextItem.GLTextItem(text=f'x_{axes_label}', color=(0,0,0)),
+                GLTextItem.GLTextItem(text=f'y_{axes_label}', color=(0,0,0)),
+                GLTextItem.GLTextItem(text=f'z_{axes_label}', color=(0,0,0)),
+            ]
+        self.update(A)
+
+
+    def update(self, A: np.ndarray):
+        for pts, axis in zip(self.pts, self.axes):
+            axis.setMeshData(vertexes=pts @ A[:3,:3].T + A[:3,3], faces=self.faces)
+        if self.frame_label is not None:
+            p = A[:3,3] + A[:3,:3] @ self.frame_label_pos
+            self.frame_label.setData(pos=p)
+        if self.axis_labels is not None:
+            for pos, label in zip(self.axis_label_poss, self.axis_labels):
+                p = A[:3,3] + A[:3,:3] @ pos
+                label.setData(pos=p)
+
+
+class AxisViz:
+
+    def __init__(self, axis: np.ndarray, pos_offset=np.zeros(3), scale=1, color=np.zeros(4), label=None):
+        height = 0.5 * scale
+        radius = height / 20
+
+        axis = np.array(axis, dtype=np.float64)
+        assert axis.shape == (3,)
+        axis /= np.linalg.norm(axis) # ensure unit vector
+        z = np.array([0,0,1.])
+        if np.equal(z, axis).all():
+            R = np.eye(3)
+        elif np.equal(-z,axis).all():
+            R = np.array([[1.,0,0],[0,-1,0],[0,0,-1]])
         else:
-            self.label = None
+            v = np.cross(z, axis)
+            c = z @ axis
+            skew_v = np.array([[0,-v[2],v[1]], [v[2],0,-v[0]], [-v[1],v[0],0]])
+            R = np.eye(3) + skew_v + (skew_v @ skew_v) / (1 + c)
 
-    def update(self, A):
-        self.mesh = self.frame_object.get_mesh(A[0:3, 0:3], A[0:3, 3])
-        self.colors = self.frame_object.get_colors()
-        self.mesh_object.setMeshData(vertexes=self.mesh,
-                                     vertexColors=self.colors)
-        if self.label is not None:
-            p = A[0:3, 3] + A[0:3, 0:3] @ np.array([0.35, 0, 0])
-            self.label.setData(pos=p)
-
-
-class FrameMeshObject:
-    def __init__(self, scale=1.0, colors=[red, green, blue]):
-        # we should easily be able to switch this to small cylinders that are glMeshObjects
-        # in future versions. 
-        a = 0.1 * scale
-        b = 0.35 * scale
-        self.points = np.array([[0, 0, 0],
-                                [a, 0, 0],
-                                [0, a, 0],
-                                [0, 0, a],
-                                [b, 0, 0],
-                                [0, b, 0],
-                                [0, 0, b]])
-        c = [np.zeros((4,3,4)) + red, np.zeros((4,3,4)) + green, np.zeros((4,3,4)) + blue]
-        self.colors = np.vstack(c)
-
-    @staticmethod
-    def points_to_mesh(p):
-        mesh = np.array([[p[0], p[2], p[3]],
-                         [p[0], p[3], p[4]],
-                         [p[3], p[2], p[4]],
-                         [p[2], p[0], p[4]],
-                         [p[0], p[1], p[3]],
-                         [p[0], p[1], p[5]],
-                         [p[1], p[3], p[5]],
-                         [p[3], p[5], p[5]],
-                         [p[0], p[1], p[2]],
-                         [p[0], p[1], p[6]],
-                         [p[1], p[2], p[6]],
-                         [p[2], p[0], p[6]]
-                         ])
-        return mesh
-
-    def get_mesh(self, R, p):
-        points = self.points @ R.T + p
-        mesh = self.points_to_mesh(points)
-        return mesh
-
-    def get_colors(self):
-        return self.colors
+        # gives mesh for cylinder along positive z-axis starting at origin
+        cylinder_mesh = gl.MeshData.cylinder(rows=10, cols=20, radius=[radius]*2, length=height)
+        pts = cylinder_mesh.vertexes()
+        cylinder_mesh.setVertexes(pts @ R.T + pos_offset)
+        self.axis = gl.GLMeshItem(meshdata=cylinder_mesh, smooth=True, color=color)
+        self.label = label
+        if label is not None:
+            self.label = GLTextItem.GLTextItem(pos=height*R[:,2] + pos_offset, text=label, color=(0,0,0))
 
 
 class EEMeshObject:
