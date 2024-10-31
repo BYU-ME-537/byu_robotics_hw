@@ -476,12 +476,15 @@ class VizScene:
 
 
 class ArmPlayer:
-    def __init__(self, arm):
+    def __init__(self, arm, fontsize=14):
         if QApplication.instance() is None:
             self.app = pg.QtWidgets.QApplication([])
         else:
             self.app = QApplication.instance()
         self.window = QMainWindow()
+        font = self.window.font()
+        font.setPointSize(fontsize)
+        self.window.setFont(font)
         self.window.setGeometry(200, 300, 1000, 700)
         self.window.setWindowTitle("Arm Play")
 
