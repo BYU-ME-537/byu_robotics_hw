@@ -874,7 +874,7 @@ class FrameViz:
 class AxisViz:
 
     def __init__(self, axis: np.ndarray, pos_offset=np.zeros(3), scale=1, color=np.zeros(4), label=None):
-        height = 0.5 * scale
+        height = 0.35 * scale
         radius = height / 20
 
         axis = np.array(axis, dtype=np.float64)
