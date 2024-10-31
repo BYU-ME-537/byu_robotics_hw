@@ -10,7 +10,7 @@ import pyqtgraph as pg
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.widgets import Slider
-from time import perf_counter, sleep
+from time import perf_counter, sleep, time
 import signal
 
 red = np.array([0.7, 0, 0, 1])
@@ -220,17 +220,36 @@ class VizScene:
         self.app.processEvents()
 
     def add_arm(self, arm, draw_frames=False, label_axes=False, joint_colors=None):
+        """
+        :param SerialArm arm: The arm to be visualized.
+        :param bool draw_frames: If True, the frames of the arm will be drawn.
+        :param bool label_axes: (bool or n+3 list of bools for each joint plus
+           end effector, base, and tip frames). If True and draw_frames is True,
+           the axes of the frames will be labeled. When frames are on top of
+           each other, the labels can be hard to see and you can turn them off
+           individually. By default, the base and tip frames are not labeled if
+           arm.base and arm.tip are identity matrices to avoid label clutter.
+        :param list joint_colors: (list of colors for each joint, each color is
+            a list of 4 for [r,g,b,1]). The color of the joints. If None, rotary
+            joints are red and prismatic joints are green.
+        """
         a = ArmMeshObject(arm, draw_frames=draw_frames, label_axes=label_axes, joint_colors=joint_colors)
         self.arms.append(a)
         a.update()
         self.window.addItem(a.mesh_object)
+
+        def draw_axes(frame, label: bool):
+            for axis in frame.axes:
+                self.window.addItem(axis)
+            if label:
+                for txt in frame.axis_labels:
+                    self.window.addItem(txt)
+
         if draw_frames:
-            for frame in a.frame_objects:
-                for axis in frame.axes:
-                    self.window.addItem(axis)
-                if label_axes:
-                    for txt in frame.axis_labels:
-                        self.window.addItem(txt)
+            draw_axes(a.frame_objects[0], a.label_base)
+            for frame, label in zip(a.frame_objects[1:-1], a.label_axes[1:-1]):
+                draw_axes(frame, label)
+            draw_axes(a.frame_objects[-1], a.label_tip)
 
         if 2 * arm.reach > self.range:
             self.range = 2 * arm.reach
@@ -238,25 +257,34 @@ class VizScene:
 
         self.app.processEvents()
 
-    def remove_arm(self, arm=None):
-        if arm is None:
+    def remove_arm(self, index: None|int=None):
+        """
+        :param int index: The index of the arm to be removed based on the order
+            they were added. If None, all arms are removed.
+        """
+        def remove_axes(frame, label: bool):
+            for axis in frame.axes:
+                self.window.removeItem(axis)
+            if label:
+                for txt in frame.axis_labels:
+                    self.window.removeItem(txt)
+        if index is None:
             for arm in self.arms:
                 self.window.removeItem(arm.mesh_object)
                 if arm.draw_frames:
-                    for frame in arm.frame_objects:
-                        for axis in frame.axes:
-                            self.window.removeItem(axis)
-                        if arm.label_axes:
-                            for txt in frame.axis_labels:
-                                self.window.removeItem(txt)
+                    remove_axes(arm.frame_objects[0], arm.label_base)
+                    for frame, label in zip(arm.frame_objects[1:-1], arm.label_axes[1:-1]):
+                        remove_axes(frame, label)
+                    remove_axes(arm.frame_objects[-1], arm.label_tip)
             self.arms.clear()
-        elif isinstance(arm, (int)):
-            self.window.removeItem(self.arms[arm].mesh_object)
-            if self.arms[arm].draw_frames:
-                for frame in self.arms[arm].frame_objects:
+        elif isinstance(index, (int)):
+            arm = self.arms[index]
+            self.window.removeItem(arm.mesh_object)
+            if arm.draw_frames:
+                for frame, label in zip(arm.frame_objects, arm.label_axes):
                     for axis in frame.axes:
                         self.window.removeItem(axis)
-                    if self.arms[arm].label_axes:
+                    if label:
                         for txt in frame.axis_labels:
                             self.window.removeItem(txt)
             self.arms.pop(arm)
@@ -265,7 +293,13 @@ class VizScene:
             return None
         self.app.processEvents()
 
-    def add_frame(self, A, label=None, axes_label=None):
+    def add_frame(self, A: np.ndarray, label: str=None, axes_label: str=None):
+        """
+        :param np.ndarray A: The 4x4 transformation matrix of the frame to be visualized.
+        :param str|None label: The label of the origin of the frame.
+        :param str|None axes_label: The label to append to the axes of the frame,
+            e.g. 'b' would display 'x_b', 'y_b', 'z_b'.
+        """
         self.frames.append(FrameViz(A, frame_label=label, axes_label=axes_label))
         self.window.addItem(self.frames[-1].axes[0])
         self.window.addItem(self.frames[-1].axes[1])
@@ -286,8 +320,12 @@ class VizScene:
 
         self.app.processEvents()
 
-    def remove_frame(self, ind=None):
-        if ind is None:
+    def remove_frame(self, index: None|int=None):
+        """
+        :param int index: The index of the frame to be removed based on the
+            order they were added. If None, all frames are removed.
+        """
+        if index is None:
             for frame in self.frames:
                 for axis in frame.axes:
                     self.window.removeItem(axis)
@@ -297,41 +335,52 @@ class VizScene:
                     for txt in frame.axis_labels:
                         self.window.removeItem(txt)
             self.frames.clear()
-        elif isinstance(ind, (int)):
-            for axis in self.frames[ind].axes:
+        elif isinstance(index, (int)):
+            for axis in self.frames[index].axes:
                 self.window.removeItem(axis)
-            if self.frames[ind].frame_label is not None:
-                self.window.removeItem(self.frames[ind].frame_label)
-            if self.frames[ind].axis_labels is not None:
-                for txt in self.frames[ind].axis_labels:
+            if self.frames[index].frame_label is not None:
+                self.window.removeItem(self.frames[index].frame_label)
+            if self.frames[index].axis_labels is not None:
+                for txt in self.frames[index].axis_labels:
                     self.window.removeItem(txt)
-            self.frames.pop(ind)
+            self.frames.pop(index)
         else:
             print("Warning: invalid index entered!")
             return None
         self.app.processEvents()
 
-    def add_axis(self, axis, pos_offset=np.zeros(3), label=None):
-        self.axes.append(AxisViz(axis, pos_offset, label=label))
+    def add_axis(self, axis: np.ndarray, pos_offset: np.ndarray=np.zeros(3),
+                 scale: float=1.0, label: str|None=None):
+        """
+        :param np.ndarray axis: The axis to be visualized relative to global origin.
+        :param np.ndarray pos_offset: Position offset for the origin of the axis.
+        :param int scale: The scale of the axis (length and radius of cylinder).
+        :param str|None label: Label placed at the tip of the axis.
+        """
+        self.axes.append(AxisViz(axis, pos_offset, scale, label=label))
         self.window.addItem(self.axes[-1].axis)
         if label is not None:
             self.window.addItem(self.axes[-1].label)
 
         self.app.processEvents()
 
-    def remove_axis(self, ind=None):
-        if ind is None:
+    def remove_axis(self, index=None):
+        """
+        :param int index: The index of the axis to be removed based on the order
+            they were added. If None, all axes are removed.
+        """
+        if index is None:
             for axis in self.axes:
                 self.window.removeItem(axis.axis)
                 if axis.label is not None:
                     self.window.removeItem(axis.label)
             self.axes.clear()
-        elif isinstance(ind, (int)):
-            ax_viz = self.axes[ind]
+        elif isinstance(index, (int)):
+            ax_viz = self.axes[index]
             self.window.removeItem(ax_viz.axis)
             if ax_viz.label is not None:
                 self.window.removeItem(ax_viz.label)
-            self.axes.pop(ind)
+            self.axes.pop(index)
         else:
             print("Warning: invalid index entered!")
             return None
@@ -359,21 +408,21 @@ class VizScene:
 
         self.app.processEvents()
 
-    def remove_marker(self, ind=None):
-        if ind is None:
+    def remove_marker(self, index=None):
+        if index is None:
             for marker in self.markers:
                 self.window.removeItem(marker)
             self.markers = []
-        elif isinstance(ind, (int)):
-            self.window.removeItem(self.markers[ind])
-            self.markers.pop(ind)
+        elif isinstance(index, (int)):
+            self.window.removeItem(self.markers[index])
+            self.markers.pop(index)
         else:
             print("Warning: invalid index entered!")
             return None
         self.app.processEvents()
 
 
-    def add_obstacle(self, pos, color=yellow, rad = 1.0):
+    def add_obstacle(self, pos, color=yellow, rad=1.0):
         if not isinstance(pos, (np.ndarray)):
             pos = np.array(pos)
 
@@ -391,20 +440,31 @@ class VizScene:
 
         self.app.processEvents()
 
-    def remove_obstacle(self, ind=None):
-        if ind is None:
+    def remove_obstacle(self, index=None):
+        if index is None:
             for obstacle in self.obstacles:
                 self.window.removeItem(obstacle)
             self.obstacles = []
-        elif isinstance(ind, (int)):
-            self.window.removeItem(self.obstacles[ind])
-            self.obstacles.pop(ind)
+        elif isinstance(index, (int)):
+            self.window.removeItem(self.obstacles[index])
+            self.obstacles.pop(index)
         else:
             print("Warning: invalid index entered!")
             return None
         self.app.processEvents()
 
     def update(self, qs=None, As=None, poss=None):
+        """
+        :param np.ndarray|list|None qs: list of joint angles for each arm in the
+            scene in the order they were added to the scene. If None, arm
+            configurations will not change.
+        :param list|None As: list of 4x4 transformation matrices for each frame
+            in the scene in the order they were added to the scene. If None,
+            frame poses will not change.
+        :param np.ndarray|list|None poss: list of positions for each marker in
+            the scene in the order they were added to the scene. If None, marker
+            positions will not change.
+        """
         if qs is not None:
             if isinstance(qs[0], (list, tuple, np.ndarray)):
                 for i in range(len(self.arms)):
@@ -442,9 +502,21 @@ class VizScene:
         self.app.processEvents()
         sleep(0.00001)
 
-    def hold(self):
-        while self.window.isVisible():
-            self.app.processEvents()
+    def hold(self, seconds: float|None=None):
+        """
+        :param float|None seconds: Will keep the window open for this many
+            seconds and then will return leaving the window in a usable state.
+            If None, the window will stay open until manually closed, at which
+            point the VizScene object is no longer usable.
+        """
+        if seconds is None:
+            while self.window.isVisible():
+                self.app.processEvents()
+        else:
+            tstart = time()
+            end = tstart + seconds
+            while time() < end and self.window.isVisible():
+                self.app.processEvents()
 
     def wander(self, index=None, q0=None, speed=1e-1, duration=np.inf, accel=5e-4):
         if index is None:
@@ -486,6 +558,13 @@ class VizScene:
 
 class ArmPlayer:
     def __init__(self, arm, fontsize=14):
+        """
+        Opens a window with sliders to control the joints of the arm. This is
+        blocking code until the window is closed.
+
+        :param SerialArm arm: The arm to be visualized.
+        :param int fontsize: The font size of the text in the side panel.
+        """
         if QApplication.instance() is None:
             self.app = pg.QtWidgets.QApplication([])
         else:
@@ -631,15 +710,26 @@ class ArmPlayer:
 
 
 class ArmMeshObject:
-    def __init__(self, arm, link_colors=None, joint_colors=None, q0=None, draw_frames=False, label_axes=False):
+    def __init__(self, arm, link_colors=None, joint_colors=None, q0=None,
+                 draw_frames=False, label_axes=False):
         self.arm = arm
         self.n = arm.n
         self.dh = arm.dh
         self.draw_frames = draw_frames
-        self.label_axes = label_axes
+        self.label_base = np.not_equal(self.arm.base, np.eye(4)).any()
+        self.label_tip = np.not_equal(self.arm.tip, np.eye(4)).any()
+        if isinstance(label_axes, bool):
+            self.label_axes = np.array([self.label_base,
+                                        *[label_axes]*(self.n+1),
+                                        self.label_tip], dtype=bool)
+        else:
+            self.label_axes = np.array([*label_axes], dtype=bool)
+            self.label_base = self.label_axes[0]
+            self.label_tip = self.label_axes[-1]
+        assert len(self.label_axes) == self.n+3
 
         if q0 is None:
-            q0 = np.zeros((self.n,))
+            q0 = np.zeros(self.n)
         self.q0 = q0
 
         self.link_objects = []
@@ -657,6 +747,7 @@ class ArmMeshObject:
         ee_scale = 2.0
 
         self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label='b'))
+        self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label='0'))
 
         link_width = np.max([arm_scale, 0.10])*0.20
         joint_width = np.max([arm_scale, 0.10])*0.30
@@ -673,7 +764,7 @@ class ArmMeshObject:
                                                     joint_height=joint_height,
                                                     link_color=link_colors[i],
                                                     joint_color=joint_colors[i]))
-            self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label=f'{i}'))
+            self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label=f'{i+1}'))
 
 
         self.ee_object = EEMeshObject(scale=arm_scale*ee_scale)
@@ -702,28 +793,31 @@ class ArmMeshObject:
         self.set_mesh(q)
         self.mesh_object.setMeshData(vertexes=self.mesh,
                                     vertexColors=self.colors)
+        if self.draw_frames:
+            self.update_frames(q)
+
+    def update_frames(self, q):
+        A = self.arm.fk(q, 0, base=True, tip=False)
+        self.frame_objects[1].update(A)
+        for i, frame_object in enumerate(self.frame_objects[2:-1]):
+            A = self.arm.fk(q, i+1, base=True, tip=False)
+            frame_object.update(A)
+        A = self.arm.fk(q, self.n, base=True, tip=True)
+        self.frame_objects[-1].update(A)
+
 
     def set_mesh(self, q):
         meshes = []
         colors = []
-        if self.draw_frames:
-            A = self.arm.fk(q, 0, base=True, tip=False)
-            R = A[:3,:3]
-            p = A[:3,3]
-            self.frame_objects[0].update(A)
         for i in range(self.n):
             A = self.arm.fk(q, i+1, base=True, tip=False)
             R = A[:3,:3]
             p = A[:3,3]
             meshes.append(self.link_objects[i].get_mesh(R, p))
             colors.append(self.link_objects[i].get_colors())
-            if self.draw_frames:
-                self.frame_objects[i+1].update(A)
         A = self.arm.fk(q, i+1, base=True, tip=True)
         R = A[:3,:3]
         p = A[:3,3]
-        if self.draw_frames:
-            self.frame_objects[-1].update(A)
 
         meshes.append(self.ee_object.get_mesh(R, p))
         colors.append(self.ee_object.get_colors())
