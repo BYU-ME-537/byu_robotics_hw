@@ -198,7 +198,16 @@ class VizScene:
             self.app = QApplication.instance()
         self.window = gl.GLViewWidget()
         self.window.setWindowTitle('Robot Visualization 2: The Sequel')
-        self.window.setGeometry(200, 100, 1200, 900)
+
+        screen_size = self.app.primaryScreen().size()
+        screen_w, screen_h = screen_size.width(), screen_size.height()
+        fraction_of_screen = 0.7 # could be a function parameter
+        x = int(screen_w * (1-fraction_of_screen)) // 2
+        y = int(screen_h * (1-fraction_of_screen)) // 2
+        win_w = int(screen_w * fraction_of_screen)
+        win_h = int(screen_h * fraction_of_screen)
+        self.window.setGeometry(x, y, win_w, win_h)
+
         self.grid = gl.GLGridItem(color=(0, 0, 0, 76.5))
         self.grid.scale(1, 1, 1)
         self.window.addItem(self.grid)
@@ -485,7 +494,14 @@ class ArmPlayer:
         font = self.window.font()
         font.setPointSize(fontsize)
         self.window.setFont(font)
-        self.window.setGeometry(200, 300, 1000, 700)
+        screen_size = self.app.primaryScreen().size()
+        screen_w,screen_h = screen_size.width(), screen_size.height()
+        fraction_of_screen = 0.7 # could be a function parameter
+        x = int(screen_w * (1-fraction_of_screen)) // 2
+        y = int(screen_h * (1-fraction_of_screen)) // 2
+        win_w = int(screen_w * fraction_of_screen)
+        win_h = int(screen_h * fraction_of_screen)
+        self.window.setGeometry(x, y, win_w, win_h)
         self.window.setWindowTitle("Arm Play")
 
         self.main_layout = QHBoxLayout()
