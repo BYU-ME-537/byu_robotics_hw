@@ -1,6 +1,6 @@
 import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QPushButton,
-                             QSizePolicy, QLabel, QLineEdit)
+                             QSizePolicy, QLabel, QLineEdit, QSpacerItem)
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import Qt
 import pyqtgraph.opengl as gl
@@ -532,9 +532,10 @@ class ArmPlayer:
 
         w1.addItem(self.arm.mesh_object)
         w1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        w2 = QVBoxLayout()
+        w2 = QVBoxLayout() # could set fontsize on w2 to isolate side panel
         self.sliders: list[QSlider] = []
         self.slider_textboxes: list[QLineEdit] = []
+        spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         for i in range(arm.n):
             line = QHBoxLayout()
             t1 = QLabel()
@@ -555,16 +556,19 @@ class ArmPlayer:
             line.addWidget(t2)
             s = QSlider(Qt.Horizontal)
             s.setRange(*(self.jt_lims[i] * self.jt_scale[i]).astype(int))
-            s.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            # maybe set slider y size policy to Minimum if slider is really tall
+            s.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             s.valueChanged.connect(self.update_sliders)
             self.sliders.append(s)
             self.slider_textboxes.append(box)
             w2.addLayout(line, stretch=0)
             w2.addWidget(s, stretch=0)
+            w2.addSpacerItem(spacer)
         button = QPushButton()
         button.setText("Randomize")
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         button.pressed.connect(self.button_pressed)
+        w2.addSpacerItem(spacer)
         self.random_button = button
         w2.addWidget(button)
         self.main_layout.addWidget(w1, stretch=3)
