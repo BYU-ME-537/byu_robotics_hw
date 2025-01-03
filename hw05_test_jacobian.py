@@ -6,10 +6,9 @@
 
 # %%
 import kinematics as kin
+import transforms as tr
 from visualization import VizScene
-import sympy as sp
 import numpy as np
-import time
 np.set_printoptions(precision=4, suppress=True)
 
 
@@ -73,8 +72,6 @@ viz.update(qs=[q_set2])
 print("now look at the configuration of the arm for q_set2 to understand J")
 
 viz.hold()
-viz.close_viz()
-
 
 
 # %%
