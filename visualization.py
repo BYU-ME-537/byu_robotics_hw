@@ -1,10 +1,9 @@
 import numpy as np
+from numpy.typing import NDArray
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QPushButton,
                              QSizePolicy, QLabel, QLineEdit, QSpacerItem)
-from PyQt5.QtCore import QSize
 from PyQt5.QtCore import Qt
 import pyqtgraph.opengl as gl
-from pyqtgraph.opengl.GLGraphicsItem import GLGraphicsItem
 from pyqtgraph.opengl.items import GLTextItem
 import pyqtgraph as pg
 import matplotlib.pyplot as plt
@@ -223,12 +222,13 @@ class VizScene:
         """
         :param SerialArm arm: The arm to be visualized.
         :param bool draw_frames: If True, the frames of the arm will be drawn.
-        :param bool label_axes: (bool or n+3 list of bools for each joint plus
-           end effector, base, and tip frames). If True and draw_frames is True,
-           the axes of the frames will be labeled. When frames are on top of
-           each other, the labels can be hard to see and you can turn them off
-           individually. By default, the base and tip frames are not labeled if
-           arm.base and arm.tip are identity matrices to avoid label clutter.
+        :param bool | list label_axes: (bool or n+3 list of bools for each joint
+           plus end effector, base, and tip frames). If True and draw_frames is
+           True, the axes of the frames will be labeled. When frames are on top
+           of each other, the labels can be hard to see and you can turn them
+           off individually by passing in a list of bools. By default, the base
+           and tip frames are not labeled if arm.base and arm.tip are identity
+           matrices to avoid label clutter.
         :param list joint_colors: (list of colors for each joint, each color is
             a list of 4 for [r,g,b,1]). The color of the joints. If None, rotary
             joints are red and prismatic joints are green.
@@ -293,7 +293,7 @@ class VizScene:
             return None
         self.app.processEvents()
 
-    def add_frame(self, A: np.ndarray, label: str=None, axes_label: str=None):
+    def add_frame(self, A: NDArray, label: str=None, axes_label: str=None):
         """
         :param np.ndarray A: The 4x4 transformation matrix of the frame to be visualized.
         :param str|None label: The label of the origin of the frame.
@@ -349,10 +349,11 @@ class VizScene:
             return None
         self.app.processEvents()
 
-    def add_axis(self, axis: np.ndarray, pos_offset: np.ndarray=np.zeros(3),
+    def add_axis(self, axis: NDArray, pos_offset: NDArray=np.zeros(3),
                  scale: float=1.0, label: str|None=None):
         """
-        :param np.ndarray axis: The axis to be visualized relative to global origin.
+        :param np.ndarray axis: The axis to be visualized relative to global origin
+            (the axis is normalized to unit length).
         :param np.ndarray pos_offset: Position offset for the origin of the axis.
         :param int scale: The scale of the axis (length and radius of cylinder).
         :param str|None label: Label placed at the tip of the axis.
@@ -557,7 +558,7 @@ class VizScene:
 
 
 class ArmPlayer:
-    def __init__(self, arm, fontsize=14):
+    def __init__(self, arm, fontsize: int=14):
         """
         Opens a window with sliders to control the joints of the arm. This is
         blocking code until the window is closed.
@@ -566,111 +567,149 @@ class ArmPlayer:
         :param int fontsize: The font size of the text in the side panel.
         """
         if QApplication.instance() is None:
-            self.app = pg.QtWidgets.QApplication([])
+            self.app: QApplication = pg.QtWidgets.QApplication([])
         else:
-            self.app = QApplication.instance()
-        self.window = QMainWindow()
-        font = self.window.font()
+            self.app: QApplication = QApplication.instance()
+
+        viz_widget = self._create_vizualization_widget(arm)
+        side_panel = self._create_side_panel_layout(arm)
+
+        self.window = self._create_main_window(viz_widget, side_panel, fontsize,
+                                               fraction_of_screen=0.7)
+
+        # should this be in constructor? It could be called by user - Mat
+        self.run()
+
+    def run(self):
+        self.window.show()
+        self.window.raise_()
+        signal.signal(signal.SIGINT, signal.SIG_DFL) # kill with ctrl-c
+        self.app.exec()
+
+    def _create_main_window(self, viz_widget, side_panel_layout, fontsize: int,
+                            fraction_of_screen: float):
+        window = QMainWindow()
+        window.setWindowTitle("Arm Player")
+
+        font = window.font()
         font.setPointSize(fontsize)
-        self.window.setFont(font)
+        window.setFont(font)
+
+        assert 0 < fraction_of_screen < 1, "fraction_of_screen must be between 0 and 1"
         screen_size = self.app.primaryScreen().size()
         screen_w,screen_h = screen_size.width(), screen_size.height()
-        fraction_of_screen = 0.7 # could be a function parameter
         x = int(screen_w * (1-fraction_of_screen)) // 2
         y = int(screen_h * (1-fraction_of_screen)) // 2
         win_w = int(screen_w * fraction_of_screen)
         win_h = int(screen_h * fraction_of_screen)
-        self.window.setGeometry(x, y, win_w, win_h)
-        self.window.setWindowTitle("Arm Play")
+        window.setGeometry(x, y, win_w, win_h)
 
-        self.main_layout = QHBoxLayout()
-        w1 = gl.GLViewWidget()
-        w1.setBackgroundColor('w')
+        main_layout = QHBoxLayout()
+        main_layout.addWidget(viz_widget, stretch=3)
+        main_layout.addLayout(side_panel_layout, stretch=1)
+
+        main_widget = QWidget()
+        main_widget.setLayout(main_layout)
+        window.setCentralWidget(main_widget)
+
+        return window
+
+    def _create_vizualization_widget(self, arm):
+        viz_widget = gl.GLViewWidget()
+        viz_widget.setBackgroundColor('w')
+        viz_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         grid = gl.GLGridItem(color=(0, 0, 0, 76.5))
         grid.scale(1, 1, 1)
-        w1.addItem(grid)
-        self.arm = ArmMeshObject(arm)
-        self.n = arm.n
-        self.jt = arm.jt
-        r_scale = 2 # slider increments by 1/2 for revelute joints
-        r_max = 180
-        p_scale = 100 # slider increments by 1/100 for prismatic joints
-        p_max = 1.
-        self.jt_scale = np.array([r_scale if jt == 'r' else p_scale for jt in arm.jt])
-        if arm.qlim is None:
-            self.jt_lims = np.array([
-                [-r_max if jt == 'r' else -p_max for jt in arm.jt],
-                [r_max if jt == 'r' else p_max for jt in arm.jt]
-                ], dtype=np.float64).T
-        else:
-            # expecting qlim for 'r' joints to be in radians
-            self.jt_lims = np.array(arm.qlim, dtype=np.float64).T
-            mask = [True if jt == 'r' else False for jt in arm.jt]
-            self.jt_lims[mask] = np.rad2deg(self.jt_lims[mask])
-            assert self.jt_lims.shape == (self.n,2)
+        viz_widget.addItem(grid)
 
-        w1.addItem(self.arm.mesh_object)
-        w1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        w2 = QVBoxLayout() # could set fontsize on w2 to isolate side panel
+        self.arm = ArmMeshObject(arm)
+        viz_widget.addItem(self.arm.mesh_object)
+        return viz_widget
+
+    def _create_side_panel_layout(self, arm):
+        self.jt: list[str] = arm.jt
+        self.jt_lims = self._get_joint_limits(arm)
+        r_scale = 2 # slider increments by 1/2 deg for revelute joints
+        p_scale = 100 # slider increments by 1/100 m for prismatic joints
+        self.jt_scale = np.array([r_scale if jt == 'r' else p_scale for jt in self.jt])
+
+        panel = QVBoxLayout()
+
         self.sliders: list[QSlider] = []
         self.slider_textboxes: list[QLineEdit] = []
-        spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         for i in range(arm.n):
-            line = QHBoxLayout()
-            t1 = QLabel()
-            t1.setText(f"Joint {i + 1}: ")
-            t1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            box = QLineEdit()
-            box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            box.setText("0.0")
-            box.editingFinished.connect(self.update_textboxes)
-            t2 = QLabel()
-            if arm.jt[i] == 'r':
-                t2.setText("(degrees)")
-            else:
-                t2.setText("(meters)")
-            t2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            line.addWidget(t1)
-            line.addWidget(box)
-            line.addWidget(t2)
-            s = QSlider(Qt.Horizontal)
-            s.setRange(*(self.jt_lims[i] * self.jt_scale[i]).astype(int))
-            # maybe set slider y size policy to Minimum if slider is really tall
-            s.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-            s.valueChanged.connect(self.update_sliders)
-            self.sliders.append(s)
-            self.slider_textboxes.append(box)
-            w2.addLayout(line, stretch=0)
-            w2.addWidget(s, stretch=0)
-            w2.addSpacerItem(spacer)
+            joint_textbox = self._create_labeled_jt_textbox_layout(i, arm.jt[i])
+            joint_slider = self._create_joint_slider_layout(self.jt_lims[i], self.jt_scale[i])
+            panel.addLayout(joint_textbox, stretch=0)
+            panel.addWidget(joint_slider, stretch=0)
+            panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        panel.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
         button = QPushButton()
         button.setText("Randomize")
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        button.pressed.connect(self.button_pressed)
-        w2.addSpacerItem(spacer)
-        self.random_button = button
-        w2.addWidget(button)
-        self.main_layout.addWidget(w1, stretch=3)
-        self.main_layout.addLayout(w2, stretch=1)
+        button.pressed.connect(self._button_pressed)
+        panel.addWidget(button)
+        return panel
 
-        w = QWidget()
-        w.setLayout(self.main_layout)
-        self.window.setCentralWidget(w)
-        self.window.show()
-        self.window.raise_()
+    def _get_joint_limits(self, arm):
+        default_lim_r = 180 # degrees
+        default_lim_p = 1. # meters
+        if arm.qlim is None:
+            jt_lims = np.array([
+                [-default_lim_r if jt == 'r' else -default_lim_p for jt in arm.jt],
+                [default_lim_r if jt == 'r' else default_lim_p for jt in arm.jt]
+                ], dtype=np.float64).T
+        else:
+            # expecting qlim for 'r' joints to be in radians
+            jt_lims = np.array(arm.qlim, dtype=np.float64).T
+            mask = [True if jt == 'r' else False for jt in arm.jt]
+            jt_lims[mask] = np.rad2deg(jt_lims[mask])
+        assert jt_lims.shape == (arm.n,2)
+        return jt_lims
 
-        self.app.processEvents()
+    def _create_labeled_jt_textbox_layout(self, idx, jt):
+        # joint label
+        t1 = QLabel()
+        t1.setText(f"Joint {idx + 1}: ")
+        t1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
-        # kill with ctrl-c
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
-        self.app.exec()
+        # textbox for joint position value
+        box = QLineEdit()
+        box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        box.setText("0.0")
+        box.editingFinished.connect(self._update_textboxes)
+        self.slider_textboxes.append(box)
+
+        # joint units label
+        t2 = QLabel()
+        if jt == 'r':
+            t2.setText("(degrees)")
+        else:
+            t2.setText("(meters)")
+        t2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
+        joint_layout = QHBoxLayout()
+        joint_layout.addWidget(t1)
+        joint_layout.addWidget(box)
+        joint_layout.addWidget(t2)
+        return joint_layout
+
+    def _create_joint_slider_layout(self, joint_lims: NDArray, scale: float):
+        s = QSlider(Qt.Horizontal)
+        s.setRange(*(joint_lims*scale).astype(int))
+        s.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        s.valueChanged.connect(self._update_sliders)
+        self.sliders.append(s)
+        return s
 
     # NOTE: The following 3 update functions are inefficient because all buttons
     # and sliders are updated when any one of them are changed. Could be optimized
     # by adding unique update functions for each item in the constructor above.
     # - Mat
-    def update_sliders(self):
-        qs = np.zeros((self.n,))
+    def _update_sliders(self):
+        qs = np.zeros((self.arm.n,))
         for i, s in enumerate(self.sliders):
             q = s.value() / self.jt_scale[i]
             if self.jt[i] == 'r':
@@ -680,8 +719,8 @@ class ArmPlayer:
             self.slider_textboxes[i].setText(f'{q}')
         self.arm.update(qs)
 
-    def update_textboxes(self):
-        qs = np.zeros((self.n,))
+    def _update_textboxes(self):
+        qs = np.zeros((self.arm.n,))
         for i, b in enumerate(self.slider_textboxes):
             try: # if the text box is empty or not a number, it will throw an error
                 q = float(b.text())
@@ -697,16 +736,16 @@ class ArmPlayer:
             qs[i] = q
         self.arm.update(qs)
 
-    def button_pressed(self):
-        qs = np.empty(self.n)
-        for i in range(self.n):
+    def _button_pressed(self):
+        qs = np.empty(self.arm.n)
+        for i in range(self.arm.n):
             q = np.random.uniform(*self.jt_lims[i])
             if self.jt[i] == 'r':
                 qs[i] = np.radians(q)
             else:
                 qs[i] = q
             self.sliders[i].setValue(int(q*self.jt_scale[i]))
-        self.update_textboxes()
+        self._update_textboxes()
 
 
 class ArmMeshObject:
@@ -716,8 +755,8 @@ class ArmMeshObject:
         self.n = arm.n
         self.dh = arm.dh
         self.draw_frames = draw_frames
-        self.label_base = np.not_equal(self.arm.base, np.eye(4)).any()
-        self.label_tip = np.not_equal(self.arm.tip, np.eye(4)).any()
+        self.label_base = np.not_equal(self.arm.base, np.eye(4)).any() and label_axes
+        self.label_tip = np.not_equal(self.arm.tip, np.eye(4)).any() and label_axes
         if isinstance(label_axes, bool):
             self.label_axes = np.array([self.label_base,
                                         *[label_axes]*(self.n+1),
@@ -975,8 +1014,7 @@ class FrameViz:
             ]
         self.update(A)
 
-
-    def update(self, A: np.ndarray):
+    def update(self, A: NDArray):
         for pts, axis in zip(self.pts, self.axes):
             axis.setMeshData(vertexes=pts @ A[:3,:3].T + A[:3,3], faces=self.faces)
         if self.frame_label is not None:
@@ -989,8 +1027,7 @@ class FrameViz:
 
 
 class AxisViz:
-
-    def __init__(self, axis: np.ndarray, pos_offset=np.zeros(3), scale=1, color=np.zeros(4), label=None):
+    def __init__(self, axis: NDArray, pos_offset=np.zeros(3), scale=1, color=np.zeros(4), label=None):
         height = 0.35 * scale
         radius = height / 20
 
