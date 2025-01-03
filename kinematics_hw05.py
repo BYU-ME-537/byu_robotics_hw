@@ -1,25 +1,21 @@
     ## copy this function into the main SerialArm class and complete the TODO below
-    def jacob(self, q, index=None, base=False, tip=False):
+    def jacob(self, q: list[float]|NDArray, index: int|None=None, base: bool=False,
+              tip: bool=False) -> NDArray:
         """
         J = arm.jacob(q)
-        Description:
-        Returns the geometric jacobian for the frame defined by "index", which corresponds
-        to a frame on the arm, with the arm in a given configuration defined by "q"
 
-        Parameters:
-        q - list or numpy array of joint positions
-        index - integer, which joint frame at which to calculate the Jacobian
+        Calculates the geometric jacobian for a specified frame of the arm in a given configuration
 
-        Returns:
-        J - numpy matrix 6xN, geometric jacobian of the robot arm
+        :param list[float] | NDArray q: joint positions
+        :param int | None index: joint frame at which to calculate the Jacobian
+        :param bool base: specify whether to include the base transform in the Jacobian calculation
+        :param bool tip: specify whether to include the tip transform in the Jacobian calculation
+        :return J: 6xN numpy array, geometric jacobian of the robot arm
         """
-
 
         if index is None:
             index = self.n
-        elif index > self.n:
-            print("WARNING: Index greater than number of joints!")
-            print(f"Index: {index}")
+        assert 0 <= index <= self.n, 'Invalid index value!'
 
         # TODO - start by declaring a zero matrix that is the correct size for the Jacobian
         J = np.zeros()
@@ -39,8 +35,6 @@
 
             # if not assume joint is prismatic
             else:
-
-
 
 
         return J

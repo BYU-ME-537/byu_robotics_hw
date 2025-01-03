@@ -1,77 +1,67 @@
 # insert this function into your SerialArm class and complete it.
 # Please keep the function definition, and what it returns the same.
-    def ik_position(self, target, q0=None, method='J_T', force=True, tol=1e-4, K=None, kd=0.001, max_iter=100):
+    def ik_position(self, target: NDArray, q0: list[float]|NDArray|None=None,
+                    method: str='J_T', force: bool=True, tol: float=1e-4,
+                    K: NDArray=None, kd: float=0.001, max_iter: int=100,
+                    debug: bool=False, debug_step: bool=False
+                    ) -> tuple[NDArray, NDArray, int, bool]:
         """
-        (qf, ef, iter, reached_max_iter, status_msg) = arm.ik2(target, q0=None, method='jt', force=False, tol=1e-6, K=None)
-        Description:
-            Returns a solution to the inverse kinematics problem finding
-            joint angles corresponding to the position (x y z coords) of target
+        qf, error_f, iters, converged = arm.ik_position(target, q0, 'J_T', K=np.eye(3))
 
-        Args:
-            target: 3x1 numpy array that defines the target location.
+        Computes the inverse kinematics solution (position only) for a given target
+        position using a specified method by finding a set of joint angles that
+        place the end effector at the target position without regard to orientation.
 
-            q0: length of initial joint coordinates, defaults to q=0 (which is
-            often a singularity - other starting positions are recommended)
+        :param NDArray target: 3x1 numpy array that defines the target location.
+        :param list[float] | NDArray | None q0: list or array of initial joint positions,
+            defaults to q0=0 (which is often a singularity - other starting positions
+            are recommended).
+        :param str method: select which IK algorithm to use. Options include:
+            - 'pinv': damped pseudo-inverse solution, qdot = J_dag * e * dt, where
+            J_dag = J.T * (J * J.T + kd**2)^-1
+            - 'J_T': jacobian transpose method, qdot = J.T * K * e
+        :param bool force: specify whether to attempt to solve even if a naive reach
+            check shows the target is outside the reach of the arm.
+        :param float tol: tolerance in the norm of the error in pose used as
+            termination criteria for while loop.
+        :param NDArray K: 3x3 numpy array. For both pinv and J_T, K is the positive
+            definite gain matrix.
+        :param float kd: used in the pinv method to make sure the matrix is invertible.
+        :param int max_iter: maximum attempts before giving up.
+        :param bool debug: specify whether to plot the intermediate steps of the algorithm.
+        :param bool debug_step: specify whether to pause between each iteration when debugging.
 
-            method: String describing which IK algorithm to use. Options include:
-                - 'pinv': damped pseudo-inverse solution, qdot = J_dag * e * dt, where
-                J_dag = J.T * (J * J.T + kd**2)^-1
-                - 'J_T': jacobian transpose method, qdot = J.T * K * e
-
-            force: Boolean, if True will attempt to solve even if a naive reach check
-            determines the target to be outside the reach of the arm
-
-            tol: float, tolerance in the norm of the error in pose used as termination criteria for while loop
-
-            K: 3x3 numpy matrix. For both pinv and J_T, K is the positive definite gain matrix used for both.
-
-            kd: is a scalar used in the pinv method to make sure the matrix is invertible.
-
-            max_iter: maximum attempts before giving up.
-
-        Returns:
-            qf: 6x1 numpy matrix of final joint values. If IK fails to converge the last set
-            of joint angles is still returned
-
-            ef: 3x1 numpy vector of the final error
-
-            count: int, number of iterations
-
-            flag: bool, "true" indicates successful IK solution and "false" unsuccessful
-
-            status_msg: A string that may be useful to understanding why it failed.
+        :return qf: 6x1 numpy array of final joint values. If IK fails to converge
+            within the max iterations, the last set of joint angles is still returned.
+        :return error_f: 3x1 numpy array of the final positional error.
+        :return iters: int, number of iterations taken.
+        :return converged: bool, specifies whether the IK solution converged within
+            the max iterations.
         """
-        # Fill in q if none given, and convert to numpy array
+        ###############################################################################################
+        # the following lines of code are data type and error checking. You don't need to understand
+        # all of it, but it is helpful to keep.
         if isinstance(q0, np.ndarray):
             q = q0
         elif q0 == None:
             q = np.array([0.0]*self.n)
-        else:
+        elif isinstance(q0, list):
             q = np.array(q0)
-
-        # initializing some variables in case checks below don't work
-        error = None
-        count = 0
+        else:
+            raise TypeError("Invlid type for initial joint positions 'q0'")
 
         # Try basic check for if the target is in the workspace.
         # Maximum length of the arm is sum(sqrt(d_i^2 + a_i^2)), distance to target is norm(A_t)
         target_distance = np.linalg.norm(target)
+        target_in_reach = target_distance <= self.reach
+        if not force:
+            assert target_in_reach, "Target outside of reachable workspace!"
+        if not target_in_reach:
+            print("Target out of workspace, but finding closest solution anyway")
 
-        if target_distance > self.reach and not force:
-            print("WARNING: Target outside of reachable workspace!")
-            return q, error, count, False, "Failed: Out of workspace"
-        else:
-            if target_distance > self.reach:
-                print("Target out of workspace, but finding closest solution anyway")
-            else:
-                msg = 'Target passes naive reach test, '
-                msg += f'distance is {target_distance:.2f} and max reach is {self.reach:.2f}'
-                print(msg)
-
-        if not isinstance(K, np.ndarray):
-            return q, error, count, False,  "No gain matrix 'K' provided"
-
-
+        assert isinstance(K, np.ndarray), "Gain matrix 'K' must be provided as a numpy array"
+        ###############################################################################################
+        ###############################################################################################
 
         # you may want to define some functions here to help with operations that you will
         # perform repeatedly in the while loop below. Alternatively, you can also just define
@@ -83,7 +73,8 @@
         #     e =
         #     return e
 
-        while np.linalg.norm(error) > tol and count < max_iter:
+        iters = 0
+        while np.linalg.norm(error) > tol and iters < max_iter:
 
         # In this while loop you will update q for each iteration, and update, then
         # your error to see if the problem has converged. You may want to print the error
@@ -94,5 +85,4 @@
 
 
         # when "while" loop is done, return the relevant info.
-
-        return (q, error, count, count < max_iter, 'No errors noted')
+        return q, error, iters, iters < max_iter
