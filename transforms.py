@@ -7,71 +7,71 @@ Empty outline derived from code written by John Morrell, former TA.
 
 import numpy as np
 from numpy import sin, cos, sqrt
-from numpy.linalg import norm
+from numpy.typing import NDArray
+from utility import clean_rotation_matrix
+
 
 ## 2D Rotations
-def rot2(th):
+def rot2(theta: float) -> NDArray:
     """
     R = rot2(th)
-    Parameters
-        theta: float or int, angle of rotation
-    Returns
-        R: 2 x 2 numpy array representing rotation in 2D by theta
+
+    :param float theta: angle of rotation (rad)
+    :return R: 2x2 numpy array representing rotation in 2D by theta
     """
 
     ## TODO - Fill this out
     R =
-    return R
+    return clean_rotation_matrix(R)
+
 
 ## 3D Transformations
-def rotx(th):
+def rotx(theta: float) -> NDArray:
     """
-    R = rotx(th)
-    Parameters
-        th: float or int, angle of rotation
-    Returns
-        R: 3 x 3 numpy array representing rotation about x-axis by amount theta
-    """
-    ## TODO - Fill this out
-    R =
+    R = rotx(theta)
 
-    return R
-
-def roty(th):
-    """
-    R = rotx(th)
-    Parameters
-        th: float or int, angle of rotation
-    Returns
-        R: 3 x 3 numpy array representing rotation about y-axis by amount theta
+    :param float theta: angle of rotation (rad)
+    :return R: 3x3 numpy array representing rotation about x-axis by amount theta
     """
     ## TODO - Fill this out
     R =
 
-    return R
+    return clean_rotation_matrix(R)
 
-def rotz(th):
-    """
-    R = rotx(th)
-    Parameters
-        th: float or int, angle of rotation
-    Returns
-        R: 3 x 3 numpy array representing rotation about z-axis by amount theta
-    """
 
+def roty(theta: float) -> NDArray:
+    """
+    R = roty(theta)
+
+    :param float theta: angle of rotation (rad)
+    :return R: 3x3 numpy array representing rotation about y-axis by amount theta
+    """
     ## TODO - Fill this out
     R =
 
-    return R
+    return clean_rotation_matrix(R)
+
+
+def rotz(theta: float) -> NDArray:
+    """
+    R = rotz(theta)
+
+    :param float theta: angle of rotation (rad)
+    :return R: 3x3 numpy array representing rotation about z-axis by amount theta
+    """
+    ## TODO - Fill this out
+    R =
+
+    return clean_rotation_matrix(R)
+
 
 # inverse of rotation matrix
-def rot_inv(R):
+def rot_inv(R: NDArray) -> NDArray:
     '''
-    R = rot_inv(R)
-    Parameters
-        R: 2x2 or 3x3 numpy array representing a proper rotation matrix
-    Returns
-        R: 2x2 or 3x3 inverse of the input rotation matrix
+    R_inv = rot_inv(R)
+
+    :param NDArray R: 2x2 or 3x3 numpy array representing a proper rotation matrix
+    :return R_inv: 2x2 or 3x3 inverse of the input rotation matrix
     '''
     ## TODO - Fill this out
     return

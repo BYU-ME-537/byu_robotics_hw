@@ -1,41 +1,34 @@
-def se3(R=np.eye(3), p=np.array([0, 0, 0])):
+def se3(R: NDArray=np.eye(3), p: NDArray=np.zeros(3)) -> NDArray:
     """
-        T = se3(R, p)
-        Description:
-            Given a numpy 3x3 array for R, and a 1x3 or 3x1 array for p, 
-            this function constructs a 4x4 homogeneous transformation 
-            matrix "T". 
+    T = se3(R, p)
 
-        Parameters:
-        R - 3x3 numpy array representing orientation, defaults to identity
-        p = 3x1 numpy array representing position, defaults to [0, 0, 0]
+    Creates a 4x4 homogeneous transformation matrix "T" from a 3x3 rotation matrix
+    and a position vector.
 
-        Returns:
-        T - 4x4 numpy array
+    :param NDArray R: 3x3 numpy array representing orientation, defaults to identity.
+    :param NDArray p: numpy array representing position, defaults to [0, 0, 0].
+    :return T: 4x4 numpy array representing the homogeneous transform.
     """
     # TODO - fill out "T"
-    T = 
+    T =
 
     return T
 
-def inv(T):
+def inv(T: NDArray) -> NDArray:
     """
-        Tinv = inv(T)
-        Description:
-        Returns the inverse transform to T
+    T_inv = inv(T)
 
-        Parameters:
-        T
+    Returns the inverse transform to T.
 
-        Returns:
-        Tinv - 4x4 numpy array that is the inverse to T so that T @ Tinv = I
+    :param NDArray T: 4x4 homogeneous transformation matrix
+    :return T_inv: 4x4 numpy array that is the inverse to T so that T @ T_inv = I
     """
-    
-    #TODO - fill this out 
-    R = 
-    p = 
-    R_inv = 
-    p_inv = 
-    T_inv = 
+
+    #TODO - fill this out
+    R =
+    p =
+    R_inv =
+    p_inv =
+    T_inv =
 
     return T_inv

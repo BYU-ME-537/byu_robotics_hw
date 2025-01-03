@@ -1,52 +1,44 @@
 """
-SO(3) conversion code to convert between different SO(3) representations. 
+SO(3) conversion code to convert between different SO(3) representations.
 
-Copy this file into your 'transforms.py' file at the bottom. 
+Copy this file into your 'transforms.py' file at the bottom.
 """
 
-import numpy as np
-from numpy import sin, cos, sqrt
 
-def R2rpy(R):
+def R2rpy(R: NDArray) -> NDArray:
     """
     rpy = R2rpy(R)
-    Description:
-    Returns the roll-pitch-yaw representation of the SO3 rotation matrix
 
-    Parameters:
-    R - 3 x 3 Numpy array for any rotation
+    Returns the roll-pitch-yaw representation of the SO3 rotation matrix.
 
-    Returns:
-    rpy - 1 x 3 Numpy Matrix, containing <roll pitch yaw> coordinates (in radians)
+    :param NDArray R: 3x3 Numpy array for any rotation.
+    :return rpy: Numpy array, containing [roll, pitch, yaw] coordinates (in radians).
     """
-    
-    # follow formula in book, use functions like "np.atan2" 
-    # for the arctangent and "**2" for squared terms. 
+
+    # follow formula in book, use functions like "np.atan2"
+    # for the arctangent and "**2" for squared terms.
     # TODO - fill out this equation for rpy
 
-    roll = 
-    pitch = 
-    yaw = 
+    roll =
+    pitch =
+    yaw =
 
     return np.array([roll, pitch, yaw])
 
 
-def R2axis(R):
+def R2axis(R: NDArray) -> NDArray:
     """
     axis_angle = R2axis(R)
-    Description:
-    Returns an axis angle representation of a SO(3) rotation matrix
 
-    Parameters:
-    R
+    Returns an axis angle representation of a SO(3) rotation matrix.
 
-    Returns:
-    axis_angle - 1 x 4 numpy matrix, containing  the axis angle representation
-    in the form: <angle, rx, ry, rz>
+    :param NDArray R: 3x3 rotation matrix.
+    :return axis_angle: numpy array containing the axis angle representation
+        in the form: [angle, rx, ry, rz]
     """
 
-    # see equation (2.27) and (2.28) on pg. 54, using functions like "np.acos," "np.sin," etc. 
-    ang = # TODO - fill out here. 
+    # see equation (2.27) and (2.28) on pg. 54, using functions like "np.acos," "np.sin," etc.
+    ang = # TODO - fill out here.
     axis_angle = np.array([ang,
                             , # TODO - fill out here, each row will be a function of "ang"
                             ,
@@ -54,35 +46,32 @@ def R2axis(R):
 
     return axis_angle
 
-def axis2R(ang, v):
-    """
-    R = axis2R(angle, rx, ry, rz, radians=True)
-    Description:
-    Returns an SO3 object of the rotation specified by the axis-angle
 
-    Parameters:
-    angle - float, the angle to rotate about the axis in radians
-    v = [rx, ry, rz] - components of the unit axis about which to rotate as 3x1 numpy array
-    
-    Returns:
-    R - 3x3 numpy array
+def axis2R(angle: float, axis: NDArray) -> NDArray:
     """
-    # TODO fill this out 
-    R = 
-    return R
+    R = axis2R(angle, axis)
 
-def R2quatuat(R):
+    Returns an SO3 object of the rotation specified by the axis-angle.
+
+    :param float angle: the angle to rotate about the axis (in radians).
+    :param NDArray axis: components of the unit axis about which to rotate as
+        a numpy array [rx, ry, rz].
+    :return R: 3x3 numpy array representing the rotation matrix.
+    """
+    # TODO fill this out
+    R =
+    return clean_rotation_matrix(R)
+
+
+def R2quat(R: NDArray) -> NDArray:
     """
     quaternion = R2quat(R)
-    Description:
-    Returns a quaternion representation of pose
 
-    Parameters:
-    R
+    Returns a quaternion representation of pose.
 
-    Returns:
-    quaternion - 1 x 4 numpy matrix, quaternion representation of pose in the 
-    format [nu, ex, ey, ez]
+    :param NDArray R: 3x3 rotation matrix.
+    :return quaternion: numpy array for the quaternion representation of pose in
+        the format [nu, ex, ey, ez]
     """
     # TODO, see equation (2.34) and (2.35) on pg. 55, using functions like "sp.sqrt," and "sp.sign"
 
@@ -90,72 +79,68 @@ def R2quatuat(R):
                      ,
                      ,
                      ])
-                    
-def quat2R(q):
+
+
+def quat2R(q: NDArray) -> NDArray:
     """
     R = quat2R(q)
-    Description:
-    Returns a 3x3 rotation matrix
 
-    Parameters:
-    q - 4x1 numpy array, [nu, ex, ey, ez ] - defining the quaternion
-    
-    Returns:
-    R - a 3x3 numpy array 
+    Returns a 3x3 rotation matrix from a quaternion.
+
+    :param NDArray q: [nu, ex, ey, ez ] - defining the quaternion.
+    :return R: numpy array, 3x3 rotation matrix.
     """
     # TODO, extract the entries of q below, and then calculate R
-    nu = 
-    ex = 
-    ey = 
-    ez = 
-    R =  
-    return R
+    nu =
+    ex =
+    ey =
+    ez =
+    R =
+    return clean_rotation_matrix(R)
 
 
-def euler2R(th1, th2, th3, order='xyz'):
+def euler2R(th1: float, th2: float, th3: float, order: str='xyz') -> NDArray:
     """
     R = euler2R(th1, th2, th3, order='xyz')
-    Description:
-    Returns a 3x3 rotation matrix as specified by the euler angles, we assume in all cases
-    that these are defined about the "current axis," which is why there are only 12 versions 
-    (instead of the 24 possiblities noted in the course slides). 
 
-    Parameters:
-    th1, th2, th3 - float, angles of rotation
-    order - string, specifies the euler rotation to use, for example 'xyx', 'zyz', etc.
-    
-    Returns:
-    R - 3x3 numpy matrix
+    Returns a 3x3 rotation matrix as specified by the euler angles, we assume in all cases
+    that these are defined about the "current axis," which is why there are only 12 versions
+    (instead of the 24 possiblities noted in the course slides).
+
+    :param float th1: angle of rotation about 1st axis (rad)
+    :param float th2: angle of rotation about 2nd axis (rad)
+    :param float th3: angle of rotation about 3rd axis (rad)
+    :param str order: specifies the euler rotation to use, for example 'xyx', 'zyz', etc.
+    :return R: 3x3 numpy array, the rotation matrix.
     """
 
-    # TODO - fill out each expression for R based on the condition 
+    # TODO - fill out each expression for R based on the condition
     # (hint: use your rotx, roty, rotz functions)
     if order == 'xyx':
-        R = 
+        R =
     elif order == 'xyz':
-        R = 
+        R =
     elif order == 'xzx':
-        R = 
+        R =
     elif order == 'xzy':
-        R = 
+        R =
     elif order == 'yxy':
-        R = 
+        R =
     elif order == 'yxz':
-        R = 
+        R =
     elif order == 'yzx':
-        R = 
+        R =
     elif order == 'yzy':
-        R = 
+        R =
     elif order == 'zxy':
-        R = 
+        R =
     elif order == 'zxz':
-        R = 
+        R =
     elif order == 'zyx':
-        R = 
+        R =
     elif order == 'zyz':
-        R = 
+        R =
     else:
-        print("Invalid Order!")
-        return
+        raise ValueError("Invalid Order!")
 
-    return R
+    return clean_rotation_matrix(R)
