@@ -1,6 +1,4 @@
 import numpy as np
-import mpmath as mp
-import sympy as sp
 from scipy.optimize import minimize
 
 def wrap_angle(q):
@@ -44,10 +42,9 @@ def wrap_diff(q1, q2):
     q = wrap_relative(q1, q2)
     return q - q2
 
-def skew(v):
-    if hasattr(v[0], '__len__'):
-        print("Input to skew(v) must be 1 dimensional!")
-        return None
+def skew(vec3):
+    v = np.array(vec3).squeeze()
+    assert v.shape == (3,), "Input to skew(vec3) must be a 3 vector!"
     return np.array([[0, -v[2], v[1]],
                      [v[2], 0, -v[0]],
                      [-v[1], v[0], 0]])
