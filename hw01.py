@@ -13,9 +13,8 @@ import time
 from visualization import VizScene
 
 Tw_to_frame1 = np.eye(4)
-
 viz = VizScene()
-viz.add_frame(np.eye(4), label='world')
+viz.add_frame(np.eye(4), label='world', axes_label='w')
 viz.add_frame(Tw_to_frame1, label='frame1')
 
 time_to_run = 10
@@ -24,12 +23,19 @@ t = 0
 start = time.time()
 while t < time_to_run:
     t = time.time() - start
-    Tw_to_frame1 = np.array([[np.cos(np.pi/2*t), -np.sin(np.pi/2*t), 0, 1],
-                             [np.sin(np.pi/2*t), np.cos(np.pi/2*t), 0, 0],
-                             [0, 0, 1, 0],
-                             [0, 0, 0, 0]])
+
+    # you can play with omega and p to see how they affect the frame
+    omega = np.pi/2
+    R = np.array([[np.cos(omega*t), -np.sin(omega*t), 0],
+                  [np.sin(omega*t), np.cos(omega*t), 0],
+                  [0, 0, 1]])
+    p = np.array([1, 0, 0])
+
+    Tw_to_frame1[:3,:3] = R
+    Tw_to_frame1[:3,-1] = p
     viz.update(As=[np.eye(4), Tw_to_frame1])
-    time.sleep(1.0/refresh_rate)
+
+    viz.hold(1/refresh_rate)
 
 viz.close_viz() # could use viz.hold() to keep it open until manually closed
 
