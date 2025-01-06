@@ -7,7 +7,7 @@ dynamics Module - Contains code for:
 John Morrell, Jan 28 2022
 Tarnarmour@gmail.com
 
-modified by: 
+modified by:
 Marc Killpack, Nov. 4, 2022
 """
 
@@ -21,14 +21,14 @@ class SerialArmDyn(SerialArm):
     """
     SerialArmDyn class represents serial arms with dynamic properties and is used to calculate forces, torques, accelerations,
     joint forces, etc. using the Newton-Euler and Euler-Lagrange formulations. It inherits from the previously defined kinematic
-    robot arm class "SerialArm". 
+    robot arm class "SerialArm".
     """
 
-    def __init__(self, 
-                 dh, 
-                 jt=None, 
-                 base=eye, 
-                 tip=eye, 
+    def __init__(self,
+                 dh,
+                 jt=None,
+                 base=eye,
+                 tip=eye,
                  joint_limits=None,
                  mass=None,
                  r_com=None,
@@ -46,7 +46,7 @@ class SerialArmDyn(SerialArm):
         else:
             self.B = np.diag(joint_damping)
 
-    def rne(self, q, qd, qdd, 
+    def rne(self, q, qd, qdd,
             Wext=np.zeros((6,1)),
             g=np.zeros((3, 1)),
             omega_base=np.zeros((3, 1)),
@@ -74,7 +74,7 @@ class SerialArmDyn(SerialArm):
         v_i = v_(i-1) + w_i x r_(i-1, com_i)
 
 
-        if motor inertia is None, we don't consider it. Solve for now without motor inertia. The solution will provide code for motor inertia as well. 
+        if motor inertia is None, we don't consider it. Solve for now without motor inertia. The solution will provide code for motor inertia as well.
         """
 
         omegas = []
@@ -85,23 +85,26 @@ class SerialArmDyn(SerialArm):
         acc_coms = []
 
         ## Solve for needed angular velocities, angular accelerations, and linear accelerations
-        ## If helpful, you can define a function to call here so that you can debug the output more easily. 
+        ## If helpful, you can define a function to call here so that you can debug the output more easily.
         for i in range(0, self.n):
             pass
 
         ## Now solve Kinetic equations by starting with forces at last link and going backwards
-        ## If helpful, you can define a function to call here so that you can debug the output more easily. 
+        ## If helpful, you can define a function to call here so that you can debug the output more easily.
         Wrenches = [np.zeros((6,1))] * (self.n + 1)
         tau = [0] * self.n
 
         for i in range(self.n - 1, -1, -1):  # Index from n-1 to 0
             pass
-            
+
         return tau, Wrenches
 
 
 
 if __name__ == '__main__':
+
+    ## NOTE: These are not the parameters for the HW. This is just trying to show
+    ## an example of how to use the code.
 
     ## this just gives an example of how to define a robot, this is a planar 3R robot.
     dh = [[0, 0, 1, 0],
@@ -129,7 +132,7 @@ if __name__ == '__main__':
                        r_com=r_coms,
                        link_inertia=link_inertias)
 
-    # once implemented, you can call arm.RNE and it should work. 
+    # once implemented, you can call arm.RNE and it should work.
     q = [np.pi/4.0]*3
     qd = [0.2]*3
     qdd = [0.05]*3
