@@ -192,7 +192,7 @@ class VizScene:
         self.range = 5
 
         if QApplication.instance() is None:
-            self.app = pg.QtWidgets.QApplication([])
+            self.app: QApplication = pg.QtWidgets.QApplication([])
         else:
             self.app = QApplication.instance()
         self.window = gl.GLViewWidget()
@@ -238,7 +238,7 @@ class VizScene:
         a.update()
         self.window.addItem(a.mesh_object)
 
-        def draw_axes(frame, label: bool):
+        def draw_axes(frame: FrameViz, label: bool):
             for axis in frame.axes:
                 self.window.addItem(axis)
             if label:
@@ -262,7 +262,7 @@ class VizScene:
         :param int index: The index of the arm to be removed based on the order
             they were added. If None, all arms are removed.
         """
-        def remove_axes(frame, label: bool):
+        def remove_axes(frame: FrameViz, label: bool):
             for axis in frame.axes:
                 self.window.removeItem(axis)
             if label:
@@ -277,7 +277,7 @@ class VizScene:
                         remove_axes(frame, label)
                     remove_axes(arm.frame_objects[-1], arm.label_tip)
             self.arms.clear()
-        elif isinstance(index, (int)):
+        elif isinstance(index, int):
             arm = self.arms[index]
             self.window.removeItem(arm.mesh_object)
             if arm.draw_frames:
@@ -289,8 +289,7 @@ class VizScene:
                             self.window.removeItem(txt)
             self.arms.pop(arm)
         else:
-            print("Warning: invalid index entered!")
-            return None
+            raise TypeError("Invalid index type")
         self.app.processEvents()
 
     def add_frame(self, A: NDArray, label: str=None, axes_label: str=None):
@@ -335,7 +334,7 @@ class VizScene:
                     for txt in frame.axis_labels:
                         self.window.removeItem(txt)
             self.frames.clear()
-        elif isinstance(index, (int)):
+        elif isinstance(index, int):
             for axis in self.frames[index].axes:
                 self.window.removeItem(axis)
             if self.frames[index].frame_label is not None:
@@ -345,8 +344,7 @@ class VizScene:
                     self.window.removeItem(txt)
             self.frames.pop(index)
         else:
-            print("Warning: invalid index entered!")
-            return None
+            raise TypeError("Invalid index type")
         self.app.processEvents()
 
     def add_axis(self, axis: NDArray, pos_offset: NDArray=np.zeros(3),
@@ -376,15 +374,14 @@ class VizScene:
                 if axis.label is not None:
                     self.window.removeItem(axis.label)
             self.axes.clear()
-        elif isinstance(index, (int)):
+        elif isinstance(index, int):
             ax_viz = self.axes[index]
             self.window.removeItem(ax_viz.axis)
             if ax_viz.label is not None:
                 self.window.removeItem(ax_viz.label)
             self.axes.pop(index)
         else:
-            print("Warning: invalid index entered!")
-            return None
+            raise TypeError("Invalid index type")
         self.app.processEvents()
 
     def add_marker(self, pos, color=green, radius=0.1):
@@ -414,12 +411,11 @@ class VizScene:
             for marker in self.markers:
                 self.window.removeItem(marker)
             self.markers = []
-        elif isinstance(index, (int)):
+        elif isinstance(index, int):
             self.window.removeItem(self.markers[index])
             self.markers.pop(index)
         else:
-            print("Warning: invalid index entered!")
-            return None
+            raise TypeError("Invalid index type")
         self.app.processEvents()
 
 
@@ -446,12 +442,11 @@ class VizScene:
             for obstacle in self.obstacles:
                 self.window.removeItem(obstacle)
             self.obstacles = []
-        elif isinstance(index, (int)):
+        elif isinstance(index, int):
             self.window.removeItem(self.obstacles[index])
             self.obstacles.pop(index)
         else:
-            print("Warning: invalid index entered!")
-            return None
+            raise TypeError("Invalid index type")
         self.app.processEvents()
 
     def update(self, qs=None, As=None, poss=None):
@@ -771,8 +766,8 @@ class ArmMeshObject:
             q0 = np.zeros(self.n)
         self.q0 = q0
 
-        self.link_objects = []
-        self.frame_objects = []
+        self.link_objects: list[LinkMeshObject] = []
+        self.frame_objects: list[FrameViz] = []
 
         if link_colors is None:
             link_colors = [blue] * self.n
@@ -831,7 +826,7 @@ class ArmMeshObject:
             q = self.q0
         self.set_mesh(q)
         self.mesh_object.setMeshData(vertexes=self.mesh,
-                                    vertexColors=self.colors)
+                                     vertexColors=self.colors)
         if self.draw_frames:
             self.update_frames(q)
 
@@ -913,13 +908,13 @@ class LinkMeshObject:
         self.link_points = self.link_points @ R.T
 
         self.joint_points = np.array([[0.5 * w, -0.5 * w, -0.5 * h],
-                                [-0.5 * w, -0.5 * w, -0.5 * h],
-                                [-0.5 * w, -0.5 * w, 0.5 * h],
-                                [0.5 * w, -0.5 * w, 0.5 * h],
-                                [0.5 * w, 0.5 * w, -0.5 * h],
-                                [-0.5 * w, 0.5 * w, -0.5 * h],
-                                [-0.5 * w, 0.5 * w, 0.5 * h],
-                                [0.5 * w, 0.5 * w, 0.5 * h]])
+                                      [-0.5 * w, -0.5 * w, -0.5 * h],
+                                      [-0.5 * w, -0.5 * w, 0.5 * h],
+                                      [0.5 * w, -0.5 * w, 0.5 * h],
+                                      [0.5 * w, 0.5 * w, -0.5 * h],
+                                      [-0.5 * w, 0.5 * w, -0.5 * h],
+                                      [-0.5 * w, 0.5 * w, 0.5 * h],
+                                      [0.5 * w, 0.5 * w, 0.5 * h]])
 
         Rz = np.array([[np.cos(theta), -np.sin(theta), 0],
                        [np.sin(theta), np.cos(theta), 0],
@@ -961,17 +956,17 @@ class LinkMeshObject:
                               [link_points[5], link_points[6], link_points[7]]])
 
         joint_mesh = np.array([[joint_points[0], joint_points[1], joint_points[2]],
-                         [joint_points[0], joint_points[2], joint_points[3]],
-                         [joint_points[0], joint_points[3], joint_points[4]],
-                         [joint_points[3], joint_points[4], joint_points[7]],
-                         [joint_points[2], joint_points[3], joint_points[6]],
-                         [joint_points[3], joint_points[6], joint_points[7]],
-                         [joint_points[0], joint_points[1], joint_points[5]],
-                         [joint_points[0], joint_points[4], joint_points[5]],
-                         [joint_points[1], joint_points[2], joint_points[6]],
-                         [joint_points[1], joint_points[5], joint_points[6]],
-                         [joint_points[4], joint_points[5], joint_points[6]],
-                         [joint_points[4], joint_points[6], joint_points[7]]])
+                               [joint_points[0], joint_points[2], joint_points[3]],
+                               [joint_points[0], joint_points[3], joint_points[4]],
+                               [joint_points[3], joint_points[4], joint_points[7]],
+                               [joint_points[2], joint_points[3], joint_points[6]],
+                               [joint_points[3], joint_points[6], joint_points[7]],
+                               [joint_points[0], joint_points[1], joint_points[5]],
+                               [joint_points[0], joint_points[4], joint_points[5]],
+                               [joint_points[1], joint_points[2], joint_points[6]],
+                               [joint_points[1], joint_points[5], joint_points[6]],
+                               [joint_points[4], joint_points[5], joint_points[6]],
+                               [joint_points[4], joint_points[6], joint_points[7]]])
 
         return np.vstack((link_mesh, joint_mesh))
 
@@ -1072,8 +1067,7 @@ class EEMeshObject:
                                 [o3, 0, w/2],
                                 [-o1, o2, -w/2],
                                 [-o1, -o2, -w/2],
-                                [o3, 0, -w/2]
-                                ])
+                                [o3, 0, -w/2]])
         self.colors = np.zeros((8,3,4)) + red
         self.colors[1,:,:] = np.zeros((3,4)) + dark_blue
 
@@ -1086,8 +1080,7 @@ class EEMeshObject:
                          [p[1], p[2], p[5]],
                          [p[1], p[4], p[5]],
                          [p[0], p[2], p[5]],
-                         [p[0], p[3], p[5]]
-                         ])
+                         [p[0], p[3], p[5]]])
         return mesh
 
     def get_mesh(self, R, p):
