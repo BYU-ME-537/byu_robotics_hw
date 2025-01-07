@@ -57,23 +57,23 @@ class SerialArmDyn(kin.SerialArm):
         for i in range(self.n):
             T_jts.append(self.fk(q, i+1))
             T_i_in_base = T_jts[i]
-            r_com_in_base_frame = T_i_in_base[0:3,0:3] @ self.coms[i] 
+            r_com_in_base_frame = T_i_in_base[0:3,0:3] @ self.coms[i]
             jacob_com_i = self.jacob_shift(q, sp.eye(3), r_com_in_base_frame, index=i+1)
-            
-            # using "sp.simplify" in any of the code below makes for slower code generation, 
+
+            # using "sp.simplify" in any of the code below makes for slower code generation,
             # but about 20 times faster execution of the function after using "lambdify"
             jacob_com.append(sp.simplify(jacob_com_i.evalf()))
 
         M_EL = sp.zeros(self.n, self.n)
         # TODO - use one for loop to implement symbolic code for M(q)
-        
+
         C_EL = sp.zeros(self.n, self.n)
         # TODO - use three nested for loops to implement symbolic code for C(q, qd)
 
         P = sp.Matrix([0])
-        # TODO - use one for loop to calculate P 
+        # TODO - use one for loop to calculate P
 
-        G_EL = sp.zeros(3,1)
+        G_EL = sp.zeros(arm.n,1)
         # TODO - use one for loop to calculate symbolic code for G(q)
 
         self.M = sp.lambdify([q], M_EL, 'numpy')
@@ -104,7 +104,3 @@ if __name__ == '__main__':
                        link_inertia=link_inertias)
 
     print(arm.M([0, 0]))
-
-
-
-
