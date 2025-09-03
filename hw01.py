@@ -15,7 +15,7 @@ from visualization import VizScene
 Tw_to_frame1 = np.eye(4)
 viz = VizScene()
 viz.add_frame(np.eye(4), label='world', axes_label='w')
-viz.add_frame(Tw_to_frame1, label='frame1')
+viz.add_frame(Tw_to_frame1, label='frame1', axes_label='1')
 
 time_to_run = 10
 refresh_rate = 60
