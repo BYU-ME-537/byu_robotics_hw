@@ -11,6 +11,8 @@ from matplotlib.patches import Circle
 from matplotlib.widgets import Slider
 from time import perf_counter, sleep, time
 import signal
+import struct
+import os
 
 red = np.array([0.7, 0, 0, 1])
 green = np.array([0, 0.7, 0, 1])
@@ -218,7 +220,7 @@ class VizScene:
 
         self.app.processEvents()
 
-    def add_arm(self, arm, draw_frames=False, label_axes=False, joint_colors=None):
+    def add_arm(self, arm, draw_frames=False, label_axes=False, joint_colors=None, gripper_stl=None, gripper_offset=np.eye(4)):
         """
         :param SerialArm arm: The arm to be visualized.
         :param bool draw_frames: If True, the frames of the arm will be drawn.
@@ -232,8 +234,14 @@ class VizScene:
         :param list joint_colors: (list of colors for each joint, each color is
             a list of 4 for [r,g,b,1]). The color of the joints. If None, rotary
             joints are red and prismatic joints are green.
+        :param str | None gripper_stl: Path to STL file for gripper mesh. If None,
+            uses default end effector geometry.
+        :param NDArray gripper_offset: 4x4 homogeneous transform for gripper pose
+            relative to the tip frame. Allows reorienting gripper relative to arm tip.
         """
-        a = ArmMeshObject(arm, draw_frames=draw_frames, label_axes=label_axes, joint_colors=joint_colors)
+        a = ArmMeshObject(arm, draw_frames=draw_frames, label_axes=label_axes, 
+                         joint_colors=joint_colors, gripper_stl=gripper_stl, 
+                         gripper_offset=gripper_offset)
         self.arms.append(a)
         a.update()
         self.window.addItem(a.mesh_object)
@@ -745,11 +753,13 @@ class ArmPlayer:
 
 class ArmMeshObject:
     def __init__(self, arm, link_colors=None, joint_colors=None, q0=None,
-                 draw_frames=False, label_axes=False):
+                 draw_frames=False, label_axes=False, gripper_stl=None, gripper_offset=np.eye(4)):
         self.arm = arm
         self.n = arm.n
         self.dh = arm.dh
         self.draw_frames = draw_frames
+        self.gripper_stl = gripper_stl
+        self.gripper_offset = gripper_offset.copy()
         self.label_base = np.not_equal(self.arm.base, np.eye(4)).any() and label_axes
         self.label_tip = np.not_equal(self.arm.tip, np.eye(4)).any() and label_axes
         if isinstance(label_axes, bool):
@@ -801,7 +811,11 @@ class ArmMeshObject:
             self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label=f'{i+1}'))
 
 
-        self.ee_object = EEMeshObject(scale=arm_scale*ee_scale)
+        # Create end effector or gripper
+        if self.gripper_stl is not None:
+            self.ee_object = GripperSTLMeshObject(self.gripper_stl, self.gripper_offset, scale=arm_scale)
+        else:
+            self.ee_object = EEMeshObject(scale=arm_scale*ee_scale)
         self.frame_objects.append(FrameViz(scale=arm_scale*frame_scale, axes_label='t'))
 
         self.mesh = np.zeros((0, 3, 3))
@@ -1089,4 +1103,148 @@ class EEMeshObject:
         return mesh
 
     def get_colors(self):
+        return self.colors
+
+
+class GripperSTLMeshObject:
+    """Mesh object for loading and displaying STL gripper at robot tip."""
+    
+    def __init__(self, stl_path, gripper_offset=np.eye(4), scale=1.0, color=None):
+        """
+        Initialize gripper from STL file.
+        
+        :param str stl_path: Path to STL file
+        :param NDArray gripper_offset: 4x4 transform for gripper relative to tip frame
+        :param float scale: Scaling factor for gripper mesh
+        :param NDArray | None color: RGBA color array [r,g,b,a]. If None, uses grey.
+        """
+        self.gripper_offset = gripper_offset.copy()
+        self.scale = scale
+        
+        if color is None:
+            self.color = grey
+        else:
+            self.color = np.array(color)
+        
+        # Load STL file
+        self.vertices, self.faces = self._load_stl(stl_path)
+        
+        # Apply scaling to vertices
+        self.vertices = self.vertices * scale
+        
+        # Calculate number of triangles for color array
+        n_triangles = len(self.faces)
+        self.colors = np.tile(self.color, (n_triangles, 3, 1))
+    
+    @staticmethod
+    def _load_stl(filename):
+        """
+        Load STL file and return vertices and faces.
+        Supports both ASCII and binary STL formats.
+        
+        :param str filename: Path to STL file
+        :return tuple: (vertices, faces) as numpy arrays
+        """
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"STL file not found: {filename}")
+        
+        with open(filename, 'rb') as f:
+            # Check if binary or ASCII
+            header = f.read(80)
+            f.seek(0)
+            
+            # Try to detect if ASCII
+            try:
+                header_str = header.decode('ascii')
+                if 'solid' in header_str.lower():
+                    # Might be ASCII, read a bit more to check
+                    test = f.read(200).decode('ascii')
+                    f.seek(0)
+                    if 'facet' in test.lower() and 'vertex' in test.lower():
+                        return GripperSTLMeshObject._load_stl_ascii(f)
+            except:
+                pass
+            
+            # Default to binary
+            f.seek(0)
+            return GripperSTLMeshObject._load_stl_binary(f)
+    
+    @staticmethod
+    def _load_stl_binary(f):
+        """Load binary STL file."""
+        # Skip 80 byte header
+        f.read(80)
+        
+        # Read number of triangles
+        n_triangles = struct.unpack('I', f.read(4))[0]
+        
+        vertices_list = []
+        
+        for i in range(n_triangles):
+            # Skip normal (3 floats)
+            f.read(12)
+            
+            # Read 3 vertices (9 floats total)
+            v1 = struct.unpack('fff', f.read(12))
+            v2 = struct.unpack('fff', f.read(12))
+            v3 = struct.unpack('fff', f.read(12))
+            
+            vertices_list.append([v1, v2, v3])
+            
+            # Skip attribute byte count
+            f.read(2)
+        
+        # Convert to numpy array
+        vertices = np.array(vertices_list, dtype=np.float32)
+        
+        # For OpenGL rendering, we need faces indexed by vertex
+        # Since STL stores triangles directly, we reshape
+        faces = np.arange(n_triangles * 3).reshape(-1, 3)
+        vertices = vertices.reshape(-1, 3)
+        
+        return vertices, faces
+    
+    @staticmethod
+    def _load_stl_ascii(f):
+        """Load ASCII STL file."""
+        vertices_list = []
+        
+        for line in f:
+            line = line.decode('ascii').strip()
+            
+            if line.startswith('vertex'):
+                # Parse vertex coordinates
+                parts = line.split()
+                vertex = [float(parts[1]), float(parts[2]), float(parts[3])]
+                vertices_list.append(vertex)
+        
+        vertices = np.array(vertices_list, dtype=np.float32)
+        n_vertices = len(vertices)
+        faces = np.arange(n_vertices).reshape(-1, 3)
+        
+        return vertices, faces
+    
+    def get_mesh(self, R, p):
+        """
+        Get transformed mesh for current pose.
+        
+        :param NDArray R: 3x3 rotation matrix of tip frame
+        :param NDArray p: 3D position of tip frame
+        :return NDArray: Transformed mesh vertices
+        """
+        # Apply gripper offset transform
+        R_offset = self.gripper_offset[:3, :3]
+        p_offset = self.gripper_offset[:3, 3]
+        
+        # Transform vertices: first apply gripper offset, then tip transform
+        # v_world = R @ (R_offset @ v_local + p_offset) + p
+        transformed = (self.vertices @ R_offset.T + p_offset) @ R.T + p
+        
+        # Reshape for mesh rendering (each face is a triangle)
+        mesh = transformed[self.faces]
+        
+        return mesh
+    
+    def get_colors(self):
+        """Return color array for mesh."""
         return self.colors
